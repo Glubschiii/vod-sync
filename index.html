@@ -509,7 +509,7 @@ function openSession(id){
   items.forEach((st,i)=>{
     const el=document.createElement("div");el.className="tile";el.innerHTML=tileMarkup(i,st.name);
     wall.appendChild(el);
-    const t={st,el,i,live:isLive(),player:null,ready:false,started:false,playReq:0,segId:null,lvl:i===0?3:0,drift:0,cool:0,ours:0,paused:true,raw:-1,rawAt:0,adv:0,state:"loading",shown:true,online:null};
+    const t={st,el,i,live:isLive(),player:null,ready:false,started:false,playReq:0,segId:null,lvl:i===0?3:0,drift:0,cool:0,ours:0,paused:true,raw:-1,rawAt:0,adv:0,lastPlay:0,state:"loading",shown:true,online:null};
     el.querySelector(".tid").addEventListener("click",()=>solo(i));
     el.querySelectorAll(".vs").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();setLvl(t,+b.dataset.l)}));
     el.querySelector(".fbtn").addEventListener("click",e=>{e.stopPropagation();toggleFocus(i)});
@@ -526,7 +526,7 @@ function teardown(){
 function segAt(st,T){return st.segments.find(g=>T>=g.start&&T<g.start+g.dur*1000)}
 function hookPlayer(t){
   const P=t.player;
-  P.addEventListener(Twitch.Player.READY,()=>{t.ready=true;applyAudio(t);t.cool=performance.now()+3000;if(t.live)liveApply(t);else apply(t,true)});
+  P.addEventListener(Twitch.Player.READY,()=>{t.ready=true;t.cool=performance.now()+3000;if(t.live)liveApply(t);else apply(t,true)});
   P.addEventListener(Twitch.Player.PLAYING,()=>{t.paused=false;if(!t.started){t.started=true;applyAudio(t)}});
   P.addEventListener(Twitch.Player.PLAY,()=>{t.paused=false;userEvt(t,"play")});
   P.addEventListener(Twitch.Player.PAUSE,()=>{t.paused=true;userEvt(t,"pause")});
@@ -568,7 +568,7 @@ function userEvt(t,kind){
   }
 }
 function applyAudio(t){
-  if(!t.ready)return;
+  if(!t.ready||!t.started)return;
   try{t.player.setMuted(t.lvl===0);if(!isIOS&&t.lvl>0)t.player.setVolume(LV[t.lvl])}catch(e){}
 }
 function setLvl(t,l){t.lvl=l;applyAudio(t);renderTile(t)}
@@ -622,7 +622,7 @@ function apply(t,force){
   if(!t.ready){t.state="loading";return}
   if(!t.shown){if(!pz(t)){t.ours=performance.now()+1500;P.pause()}t.state="ok";return}
   if(!sheetOpen()){
-    if(S.playing&&pz(t)){t.ours=performance.now()+1500;if(!t.started&&!t.playReq)t.playReq=performance.now();P.play()}
+    if(S.playing&&pz(t)&&performance.now()-t.lastPlay>3000){t.lastPlay=performance.now();t.ours=t.lastPlay+1500;if(!t.started&&!t.playReq)t.playReq=t.lastPlay;P.play()}
     if(!S.playing&&!pz(t)){t.ours=performance.now()+1500;P.pause()}
   }
   const cur=curOf(t);
@@ -641,7 +641,7 @@ function liveApply(t){
   const P=t.player,n=performance.now();
   if(!t.shown||t.online===false){if(!pz(t)){t.ours=n+1500;P.pause()}t.state="ok";return}
   if(!sheetOpen()){
-    if(S.playing&&pz(t)){t.ours=n+1500;if(!t.started&&!t.playReq)t.playReq=n;P.play()}
+    if(S.playing&&pz(t)&&n-t.lastPlay>3000){t.lastPlay=n;t.ours=n+1500;if(!t.started&&!t.playReq)t.playReq=n;P.play()}
     if(!S.playing&&!pz(t)){t.ours=n+1500;P.pause()}
   }
   if(!S.playing)t.playReq=0;
@@ -691,7 +691,7 @@ function jumpTo(T,label){
 function togglePlay(){
   if(!S.session)return;
   S.baseT=now();S.baseWall=performance.now();S.playing=!S.playing;
-  S.tiles.forEach(t=>{if(!t.ready||!t.shown)return;t.ours=performance.now()+1500;if(S.playing&&!t.started&&!t.playReq)t.playReq=performance.now();
+  S.tiles.forEach(t=>{if(!t.ready||!t.shown)return;t.ours=performance.now()+1500;if(S.playing&&!t.started&&!t.playReq)t.playReq=performance.now();t.lastPlay=performance.now();
     try{const ok=t.live?t.online!==false:!!segAt(t.st,now());if(S.playing&&ok)t.player.play();else t.player.pause()}catch(e){}});
   if(!isLive())S.tiles.forEach(t=>apply(t,true));
   if(S.playing)[800,2500].forEach(ms=>setTimeout(()=>S.tiles.forEach(applyAudio),ms));
@@ -957,7 +957,8 @@ let wl=null;
 async function wake(){try{if(S.playing&&!wl&&navigator.wakeLock){wl=await navigator.wakeLock.request("screen");wl.addEventListener("release",()=>wl=null)}else if(!S.playing&&wl){wl.release();wl=null}}catch(e){}}
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)wake();else savePos()});
 
-function tick(){
+function tick(){try{tickInner()}catch(e){console.error(e)}}
+function tickInner(){
   if(!S.session)return;
   if(isLive()){updateShown();S.tiles.forEach(liveApply);render();return}
   const [,b]=bounds();
