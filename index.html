@@ -533,17 +533,24 @@ function hookPlayer(t){
   P.addEventListener(Twitch.Player.ENDED,()=>{t.paused=true});
   P.addEventListener(Twitch.Player.SEEK,()=>{t.raw=-1;userEvt(t,"seek")});
 }
-function createPlayer(t){
+function createPlayer(t,autoplay){
   const T=now();
   let seg=segAt(t.st,T)||t.st.segments.find(g=>g.start>T)||t.st.segments[t.st.segments.length-1];
   const off=Math.min(Math.max(0,(T-seg.start)/1000),seg.dur-1);
   t.segId=seg.id;
   const h=Math.floor(off/3600),m=Math.floor(off%3600/60),s=Math.floor(off%60);
-  t.player=new Twitch.Player("pl"+t.i,{width:"100%",height:"100%",video:seg.id,time:`${h}h${m}m${s}s`,autoplay:false,muted:true,parent:[location.hostname]});
+  t.player=new Twitch.Player("pl"+t.i,{width:"100%",height:"100%",video:seg.id,time:`${h}h${m}m${s}s`,autoplay:!!autoplay,muted:true,parent:[location.hostname]});
   hookPlayer(t);
 }
-function createLivePlayer(t){
-  t.player=new Twitch.Player("pl"+t.i,{width:"100%",height:"100%",channel:t.st.login,autoplay:false,muted:true,parent:[location.hostname]});
+/* a player that is stuck gets thrown away and created fresh (starting muted with autoplay, which every browser allows) */
+function reloadPlayer(t){
+  const n=performance.now();t.reloads=(t.reloads||0)+1;t.reloadAt=n;
+  t.el.querySelector(".player").innerHTML="";
+  Object.assign(t,{ready:false,started:false,paused:true,raw:-1,rawAt:0,adv:0,playReq:n,lastPlay:n,waiting:false,seekAt:0,state:"loading"});
+  if(t.live)createLivePlayer(t,true);else createPlayer(t,true);
+}
+function createLivePlayer(t,autoplay){
+  t.player=new Twitch.Player("pl"+t.i,{width:"100%",height:"100%",channel:t.st.login,autoplay:!!autoplay,muted:true,parent:[location.hostname]});
   hookPlayer(t);
 }
 const sheetOpen=()=>!$("#setup").hidden||!$("#jump").hidden||!$("#share").hidden;
@@ -631,7 +638,11 @@ function apply(t,force){
   const doSeek=()=>{const ahead=S.playing?Math.min(t.load,15):0;t.ours=nowW+4000;P.seek(Math.max(0,Math.min(off+ahead,seg.dur-1)));t.seekAt=nowW;t.waiting=true;t.drift=0;t.raw=-1};
   if(force){doSeek();t.state="ok";return}
   if(!S.playing)t.playReq=0;
-  if(!t.started){t.drift=0;t.state=S.playing&&t.playReq&&nowW-t.playReq>5000?"blocked":"ok";return}
+  const canReload=(t.reloads||0)<3&&nowW-(t.reloadAt||0)>20000&&!sheetOpen();
+  if(!t.started){
+    if(S.playing&&t.playReq&&nowW-t.playReq>9000&&canReload){reloadPlayer(t);return}
+    t.drift=0;t.state=S.playing&&t.playReq&&nowW-t.playReq>5000?"blocked":"ok";return}
+  if(S.playing&&!t.waiting&&nowW-t.adv>12000&&nowW-t.seekAt>12000&&canReload){reloadPlayer(t);return}
   /* after a seek, wait until the video really moves again before judging the sync (long VODs can take a while on iPad) */
   if(t.waiting){
     if(t.adv>t.seekAt+300){t.waiting=false;t.cool=nowW+2500;if(S.playing)t.load=Math.max(0,(t.adv-t.seekAt)/1000-0.5)}
@@ -653,6 +664,7 @@ function liveApply(t){
     if(!S.playing&&!pz(t)){t.ours=n+1500;P.pause()}
   }
   if(!S.playing)t.playReq=0;
+  if(!t.started&&S.playing&&t.playReq&&n-t.playReq>9000&&(t.reloads||0)<3&&n-(t.reloadAt||0)>20000&&!sheetOpen()){reloadPlayer(t);return}
   t.state=!t.started&&S.playing&&t.playReq&&n-t.playReq>5000?"blocked":"ok";
 }
 function liveReshow(t){
@@ -705,7 +717,7 @@ function togglePlay(){
   if(S.playing)[800,2500].forEach(ms=>setTimeout(()=>S.tiles.forEach(applyAudio),ms));
   wake();renderControls();savePos();
 }
-function syncNow(){if(isLive())return;S.tiles.forEach(t=>t.autoSeeks=[]);S.baseT=now();S.baseWall=performance.now();S.tiles.forEach(t=>apply(t,true));render()}
+function syncNow(){if(isLive())return;S.tiles.forEach(t=>{t.autoSeeks=[];t.reloads=0});S.baseT=now();S.baseWall=performance.now();S.tiles.forEach(t=>apply(t,true));render()}
 let lastSave=0;
 function savePos(){if(!S.session||isLive())return;S.session.pos=now();LS.set("vs.sessions",S.sessions);lastSave=performance.now()}
 
