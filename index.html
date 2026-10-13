@@ -224,7 +224,7 @@ a.btn{text-decoration:none}
         <label class="f">Streamer oder VOD-Links, einer pro Zeile
           <textarea id="sInput" placeholder="streamer_a&#10;streamer_b&#10;https://www.twitch.tv/videos/2290000000"></textarea>
         </label>
-        <p>Bei Streamernamen werden alle VODs gesucht, die an diesem Tag gestartet sind, auch mehrere pro Streamer. Hat ein Link einen Zeitstempel (<span class="mono">?t=12h20m30s</span>), startet die Sitzung genau dort.</p>
+        <p>Bei Streamernamen werden alle VODs gesucht, die an diesem Tag liefen, auch mehrere pro Streamer und auch Streams, die schon am Vortag gestartet sind. Hat ein Link einen Zeitstempel (<span class="mono">?t=12h20m30s</span>), startet die Sitzung genau dort.</p>
         <div class="actions"><button class="btn primary" id="bFind">VODs suchen</button></div>
       </div>
       <div id="newLive" hidden style="display:flex;flex-direction:column;gap:10px">
@@ -429,12 +429,13 @@ async function findVods(){
       const missing=logins.filter(l=>!users.find(u=>u.login===l));
       for(const u of users){
         const vids=await helix("videos?user_id="+u.id+"&type=archive&first=50");
-        vids.map(toSeg).filter(g=>g.start>=d0&&g.start<d1).forEach(g=>segs.push(g));
+        vids.map(toSeg).filter(g=>g.start<d1&&(g.start>=d0||g.start+g.dur*1000-d0>=30*60000)).forEach(g=>{if(g.start<d0)g.carry=true;segs.push(g)});
       }
       if(missing.length)status("Nicht gefunden: "+missing.join(", "),"err");
     }
     const groups={};
     for(const g of segs){(groups[g.login]=groups[g.login]||{login:g.login,name:g.name,segments:[]}).segments.push(g)}
+    S.foundDay=logins.length?new Date($("#sDate").value+"T00:00:00").getTime():null;
     S.found=Object.values(groups).map(gr=>(gr.segments.sort((a,b)=>a.start-b.start),gr));
     renderFound();
     if(!S.found.length)status("Keine VODs gefunden. Stimmt der Tag? VODs werden je nach Kanal nach 7–60 Tagen gelöscht.","err");
@@ -447,7 +448,7 @@ function renderFound(){
   (S.found||[]).forEach((gr,gi)=>{
     const g=document.createElement("div");g.className="fgroup";
     g.innerHTML=`<header><span class="chip" style="background:${COLORS[gi%COLORS.length]}"></span>${esc(gr.name)}</header>`+
-      gr.segments.map((s,si)=>`<label class="vod"><input type="checkbox" checked data-g="${gi}" data-s="${si}"><div class="meta"><div class="t">${esc(s.title)}</div><div class="s mono">${tf.format(s.start)} · ${fmt(s.dur)}</div></div></label>`).join("");
+      gr.segments.map((s,si)=>`<label class="vod"><input type="checkbox" checked data-g="${gi}" data-s="${si}"><div class="meta"><div class="t">${esc(s.title)}</div><div class="s mono">${s.carry?"läuft schon seit Vortag · ":""}${tf.format(s.start)} · ${fmt(s.dur)}</div></div></label>`).join("");
     box.appendChild(g);
   });
   $("#startRow").hidden=!(S.found&&S.found.length);
@@ -456,12 +457,13 @@ function createSession(){
   const picked=[];
   const box=(gi,si)=>document.querySelector(`#found input[data-g="${gi}"][data-s="${si}"]`);
   (S.found||[]).forEach((gr,gi)=>{
-    const segs=gr.segments.filter((s,si)=>box(gi,si)?.checked).map(s=>({id:s.id,start:s.start,dur:s.dur,title:s.title}));
+    const segs=gr.segments.filter((s,si)=>box(gi,si)?.checked).map(s=>({id:s.id,start:s.start,dur:s.dur,title:s.title,carry:!!s.carry}));
     if(segs.length)picked.push({login:gr.login,name:gr.name,segments:segs});
   });
   if(!picked.length){status("Wähle mindestens ein VOD aus.","err");return}
   if(picked.length>6){status("Maximal 6 Streams gleichzeitig.","err");return}
   const sess={id:Date.now().toString(36),name:$("#sName").value.trim()||"Sitzung "+new Date().toLocaleDateString("de-AT"),streamers:picked,pos:null};
+  if(S.foundDay&&picked.some(st=>st.segments.some(g=>g.carry))){sess.from=S.foundDay;sess.pos=S.foundDay}
   if(S.startAt){for(const st of picked){const g=st.segments.find(x=>x.id===S.startAt.id);if(g)sess.pos=g.start+S.startAt.off*1000}}
   S.sessions.push(sess);LS.set("vs.sessions",S.sessions);
   S.found=null;$("#found").innerHTML="";$("#startRow").hidden=true;$("#sInput").value="";$("#sName").value="";
@@ -832,7 +834,7 @@ const b64u={enc:s=>btoa(unescape(encodeURIComponent(s))).replace(/\+/g,"-").repl
   dec:s=>decodeURIComponent(escape(atob(s.replace(/-/g,"+").replace(/_/g,"/"))))};
 function shareUrl(sess){
   const o=sess.type==="live"?{t:"l",n:sess.name,c:sess.channels.map(c=>[c.login,c.name])}
-    :{n:sess.name,p:Math.round((sess.pos||boundsOf(sess)[0])/1000),s:sess.streamers.map(st=>[st.login,st.name,st.segments.map(g=>[g.id,Math.round(g.start/1000),g.dur])])};
+    :{n:sess.name,f:sess.from?Math.round(sess.from/1000):undefined,p:Math.round((sess.pos||boundsOf(sess)[0])/1000),s:sess.streamers.map(st=>[st.login,st.name,st.segments.map(g=>[g.id,Math.round(g.start/1000),g.dur])])};
   return location.origin+location.pathname+"?s="+b64u.enc(JSON.stringify(o));
 }
 function openShare(sess){
@@ -859,7 +861,7 @@ function importShared(){
       const sig=x=>(x.streamers||[]).flatMap(st=>st.segments.map(g=>g.id)).sort().join();
       sess=S.sessions.find(x=>x.type!=="live"&&sig(x)===sig({streamers}));
       if(sess){sess.pos=o.p*1000;sess.name=o.n||sess.name}
-      else{sess={id:Date.now().toString(36),name:o.n||"Sitzung",streamers,pos:o.p*1000};S.sessions.push(sess)}
+      else{sess={id:Date.now().toString(36),name:o.n||"Sitzung",streamers,pos:o.p*1000,from:o.f?o.f*1000:undefined};S.sessions.push(sess)}
     }
     LS.set("vs.sessions",S.sessions);
     openSession(sess.id);notice("Sitzung übernommen.",[],3000);
@@ -893,7 +895,7 @@ $("#jLink").addEventListener("input",e=>{
 ["#jH","#jM","#jS"].forEach(s=>$(s).addEventListener("input",previewJump));
 $("#jCancel").onclick=()=>$("#jump").hidden=true;
 $("#jGo").onclick=()=>{$("#jump").hidden=true;jumpTo(jumpTarget().T)};
-$("#jFromStart").onclick=()=>{$("#jump").hidden=true;jumpTo(bounds()[0],"Zum Anfang gesprungen")};
+$("#jFromStart").onclick=()=>{$("#jump").hidden=true;jumpTo(startT(),"Zum Anfang gesprungen")};
 
 /* timeline: tapping only proposes a jump, it needs a confirm */
 let scrubbing=false,pendingT=null;
@@ -907,7 +909,8 @@ $("#scrub").addEventListener("change",()=>{
 });
 document.querySelectorAll("[data-skip]").forEach(b=>b.onclick=()=>setT(now()+(+b.dataset.skip)*1000));
 $("#bPlay").onclick=$("#bPlay2").onclick=togglePlay;
-$("#bStart").onclick=()=>jumpTo(bounds()[0],"Zum Anfang gesprungen");
+const startT=()=>Math.max(bounds()[0],S.session.from||0);
+$("#bStart").onclick=()=>jumpTo(startT(),"Zum Anfang gesprungen");
 $("#bJump").onclick=openJump;
 $("#bSync").onclick=syncNow;
 $("#bAuto").onclick=()=>{S.autoSync=!S.autoSync;LS.set("vs.auto",S.autoSync);renderControls()};
