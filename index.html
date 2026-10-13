@@ -509,12 +509,12 @@ function openSession(id){
   items.forEach((st,i)=>{
     const el=document.createElement("div");el.className="tile";el.innerHTML=tileMarkup(i,st.name);
     wall.appendChild(el);
-    const t={st,el,i,live:isLive(),player:null,ready:false,started:false,playReq:0,segId:null,lvl:i===0?3:0,drift:0,cool:0,ours:0,paused:true,raw:-1,rawAt:0,adv:0,lastPlay:0,seekAt:0,waiting:false,autoSeeks:[],load:0,state:"loading",shown:true,online:null};
+    const t={st,el,i,live:isLive(),player:null,ready:false,started:false,playReq:0,segId:null,lvl:i===0?3:0,drift:0,cool:0,ours:0,paused:true,raw:-1,rawAt:0,adv:0,lastPlay:0,seekAt:0,waiting:false,autoSeeks:[],load:0,state:"loading",shown:false,unloaded:true,online:null};
     el.querySelector(".tid").addEventListener("click",()=>solo(i));
     el.querySelectorAll(".vs").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();setLvl(t,+b.dataset.l)}));
     el.querySelector(".fbtn").addEventListener("click",e=>{e.stopPropagation();toggleFocus(i)});
+    el.hidden=true;
     S.tiles.push(t);
-    if(t.live)createLivePlayer(t);else createPlayer(t);
   });
   $("#setup").hidden=true;$("#dock").hidden=false;
   if(isLive())pollLive();
@@ -525,13 +525,13 @@ function teardown(){
 }
 function segAt(st,T){return st.segments.find(g=>T>=g.start&&T<g.start+g.dur*1000)}
 function hookPlayer(t){
-  const P=t.player;
-  P.addEventListener(Twitch.Player.READY,()=>{t.ready=true;t.cool=performance.now()+3000;if(t.live)liveApply(t);else apply(t,true)});
-  P.addEventListener(Twitch.Player.PLAYING,()=>{t.paused=false;if(!t.started){t.started=true;applyAudio(t)}});
-  P.addEventListener(Twitch.Player.PLAY,()=>{t.paused=false;userEvt(t,"play")});
-  P.addEventListener(Twitch.Player.PAUSE,()=>{t.paused=true;userEvt(t,"pause")});
-  P.addEventListener(Twitch.Player.ENDED,()=>{t.paused=true});
-  P.addEventListener(Twitch.Player.SEEK,()=>{t.raw=-1;userEvt(t,"seek")});
+  const P=t.player,on=(ev,fn)=>P.addEventListener(ev,(...x)=>{if(t.player===P)fn(...x)});
+  on(Twitch.Player.READY,()=>{t.ready=true;t.cool=performance.now()+3000;if(t.live)liveApply(t);else apply(t,true)});
+  on(Twitch.Player.PLAYING,()=>{t.paused=false;if(!t.started){t.started=true;applyAudio(t)}});
+  on(Twitch.Player.PLAY,()=>{t.paused=false;userEvt(t,"play")});
+  on(Twitch.Player.PAUSE,()=>{t.paused=true;userEvt(t,"pause")});
+  on(Twitch.Player.ENDED,()=>{t.paused=true});
+  on(Twitch.Player.SEEK,()=>{t.raw=-1;userEvt(t,"seek")});
 }
 function createPlayer(t,autoplay){
   const T=now();
@@ -588,6 +588,18 @@ function toggleFocus(i){
   if(leaving&&!isLive())setTimeout(syncNow,400);
 }
 
+/* only streams on screen get a Twitch player; hidden ones are removed completely (keeps the iPad light) */
+function unloadPlayer(t){
+  if(t.unloaded)return;
+  t.el.querySelector(".player").innerHTML="";
+  Object.assign(t,{unloaded:true,player:null,ready:false,started:false,paused:true,raw:-1,rawAt:0,adv:0,playReq:0,waiting:false,seekAt:0,state:"loading"});
+}
+function loadPlayer(t){
+  if(!t.unloaded)return;
+  const n=performance.now();
+  Object.assign(t,{unloaded:false,playReq:S.playing?n:0,lastPlay:n});
+  if(t.live)createLivePlayer(t,S.playing);else createPlayer(t,S.playing);
+}
 /* which tiles are on screen */
 function wantShown(t){
   if(S.focus>=0)return t.i===S.focus;
@@ -602,8 +614,7 @@ function updateShown(force){
   S.tiles.forEach(t=>{
     const w=wantShown(t);
     if(w!==t.shown){changed=true;t.shown=w;t.el.hidden=!w;
-      if(!w){if(t.ready&&!pz(t)){t.ours=performance.now()+1500;try{t.player.pause()}catch(e){}}}
-      else if(t.ready){setTimeout(()=>{if(t.live){liveReshow(t)}else apply(t,true)},250)}
+      if(!w)unloadPlayer(t);else loadPlayer(t);
     }else t.el.hidden=!w;
   });
   if(changed&&S.tiles.some(t=>t.shown)&&!S.tiles.some(t=>t.shown&&t.lvl>0)){const f=S.tiles.find(t=>t.shown);setLvl(f,3)}
@@ -613,6 +624,7 @@ function updateShown(force){
 /* VOD control */
 function apply(t,force){
   const T=now(),seg=segAt(t.st,T),P=t.player;
+  if(t.unloaded){const next=seg?null:t.st.segments.find(g=>g.start>T);t.state=seg?"ok":next?"waiting":"ended";t.next=next;return}
   if(!seg){
     const next=t.st.segments.find(g=>g.start>T);
     t.state=next?"waiting":"ended";t.next=next;
@@ -656,7 +668,7 @@ function apply(t,force){
 }
 /* LIVE control */
 function liveApply(t){
-  if(!t.ready){t.state="loading";return}
+  if(t.unloaded||!t.ready){t.state="loading";return}
   const P=t.player,n=performance.now();
   if(!t.shown||t.online===false){if(!pz(t)){t.ours=n+1500;P.pause()}t.state="ok";return}
   if(!sheetOpen()){
