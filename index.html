@@ -526,7 +526,7 @@ function teardown(){
 function segAt(st,T){return st.segments.find(g=>T>=g.start&&T<g.start+g.dur*1000)}
 function hookPlayer(t){
   const P=t.player,on=(ev,fn)=>P.addEventListener(ev,(...x)=>{if(t.player===P)fn(...x)});
-  on(Twitch.Player.READY,()=>{t.ready=true;t.cool=performance.now()+3000;if(t.live)liveApply(t);else apply(t,true)});
+  on(Twitch.Player.READY,()=>{t.ready=true;t.cool=performance.now()+4000;if(t.live)liveApply(t);else apply(t,false)});
   on(Twitch.Player.PLAYING,()=>{t.paused=false;if(!t.started){t.started=true;applyAudio(t)}});
   on(Twitch.Player.PLAY,()=>{t.paused=false;userEvt(t,"play")});
   on(Twitch.Player.PAUSE,()=>{t.paused=true;userEvt(t,"pause")});
@@ -658,7 +658,9 @@ function apply(t,force){
   /* after a seek, wait until the video really moves again before judging the sync (long VODs can take a while on iPad) */
   if(t.waiting){
     if(t.adv>t.seekAt+300){t.waiting=false;t.cool=nowW+2500;if(S.playing)t.load=Math.max(0,(t.adv-t.seekAt)/1000-0.5)}
-    else{t.drift=0;t.state=S.playing&&nowW-t.seekAt>10000?"loading":"ok";return}
+    else{
+      if(S.playing&&nowW-t.seekAt>15000&&canReload){reloadPlayer(t);return}
+      t.drift=0;t.state=S.playing&&nowW-t.seekAt>10000?"loading":"ok";return}
   }
   t.drift=cur-off;
   if(nowW<t.cool){t.state="ok";return}
