@@ -509,7 +509,7 @@ function openSession(id){
   items.forEach((st,i)=>{
     const el=document.createElement("div");el.className="tile";el.innerHTML=tileMarkup(i,st.name);
     wall.appendChild(el);
-    const t={st,el,i,live:isLive(),player:null,ready:false,started:false,playReq:0,segId:null,lvl:i===0?3:0,drift:0,cool:0,ours:0,paused:true,raw:-1,rawAt:0,adv:0,lastPlay:0,state:"loading",shown:true,online:null};
+    const t={st,el,i,live:isLive(),player:null,ready:false,started:false,playReq:0,segId:null,lvl:i===0?3:0,drift:0,cool:0,ours:0,paused:true,raw:-1,rawAt:0,adv:0,lastPlay:0,seekAt:0,waiting:false,autoSeeks:[],load:0,state:"loading",shown:true,online:null};
     el.querySelector(".tid").addEventListener("click",()=>solo(i));
     el.querySelectorAll(".vs").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();setLvl(t,+b.dataset.l)}));
     el.querySelector(".fbtn").addEventListener("click",e=>{e.stopPropagation();toggleFocus(i)});
@@ -627,13 +627,21 @@ function apply(t,force){
   }
   const cur=curOf(t);
   const nowW=performance.now();
-  if(force){t.ours=nowW+4000;P.seek(Math.max(0,off));t.cool=nowW+4000;t.drift=0;t.state="ok";t.raw=-1;return}
+  /* when playing, aim a bit ahead by how long this player needed to load last time */
+  const doSeek=()=>{const ahead=S.playing?Math.min(t.load,15):0;t.ours=nowW+4000;P.seek(Math.max(0,Math.min(off+ahead,seg.dur-1)));t.seekAt=nowW;t.waiting=true;t.drift=0;t.raw=-1};
+  if(force){doSeek();t.state="ok";return}
   if(!S.playing)t.playReq=0;
   if(!t.started){t.drift=0;t.state=S.playing&&t.playReq&&nowW-t.playReq>5000?"blocked":"ok";return}
+  /* after a seek, wait until the video really moves again before judging the sync (long VODs can take a while on iPad) */
+  if(t.waiting){
+    if(t.adv>t.seekAt+300){t.waiting=false;t.cool=nowW+2500;if(S.playing)t.load=Math.max(0,(t.adv-t.seekAt)/1000-0.5)}
+    else{t.drift=0;t.state=S.playing&&nowW-t.seekAt>10000?"loading":"ok";return}
+  }
   t.drift=cur-off;
   if(nowW<t.cool){t.state="ok";return}
   t.state=Math.abs(t.drift)>2.5?"drift":"ok";
-  if(S.autoSync&&S.playing&&!sheetOpen()&&Math.abs(t.drift)>4){t.ours=nowW+2000;P.seek(Math.max(0,off));t.cool=nowW+5000;t.state="ok"}
+  t.autoSeeks=t.autoSeeks.filter(x=>nowW-x<60000);
+  if(S.autoSync&&S.playing&&!sheetOpen()&&Math.abs(t.drift)>4&&t.autoSeeks.length<3){t.autoSeeks.push(nowW);doSeek();t.state="ok"}
 }
 /* LIVE control */
 function liveApply(t){
@@ -697,7 +705,7 @@ function togglePlay(){
   if(S.playing)[800,2500].forEach(ms=>setTimeout(()=>S.tiles.forEach(applyAudio),ms));
   wake();renderControls();savePos();
 }
-function syncNow(){if(isLive())return;S.baseT=now();S.baseWall=performance.now();S.tiles.forEach(t=>apply(t,true));render()}
+function syncNow(){if(isLive())return;S.tiles.forEach(t=>t.autoSeeks=[]);S.baseT=now();S.baseWall=performance.now();S.tiles.forEach(t=>apply(t,true));render()}
 let lastSave=0;
 function savePos(){if(!S.session||isLive())return;S.session.pos=now();LS.set("vs.sessions",S.sessions);lastSave=performance.now()}
 
