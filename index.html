@@ -287,7 +287,7 @@ const ICON={
 
 /* ================= state ================= */
 const S={
-  clientId:LS.get("vs.clientId",""), token:LS.get("vs.token",""),
+  clientId:LS.get("vs.clientId","")||"w71y0nig0v9inlw45ujqieaafbmedd", token:LS.get("vs.token",""),
   sessions:LS.get("vs.sessions",[]), session:null,
   playing:false, baseT:0, baseWall:0,
   tiles:[], layout:LS.get("vs.layout","grid"), focus:0,
@@ -380,7 +380,7 @@ async function findVods(){
       const missing=logins.filter(l=>!users.find(u=>u.login===l));
       for(const u of users){
         const vids=await helix("videos?user_id="+u.id+"&type=archive&first=50");
-        vids.map(toSeg).filter(g=>g.start<d1&&g.start+g.dur*1000>d0).forEach(g=>segs.push(g));
+        vids.map(toSeg).filter(g=>g.start>=d0&&g.start<d1).forEach(g=>segs.push(g));
       }
       if(missing.length)status("Nicht gefunden: "+missing.join(", "),"err");
     }
