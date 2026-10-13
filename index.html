@@ -3,29 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>Multi-VOD Sync</title>
+<title>vodsync</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="VOD Sync">
-<meta name="theme-color" content="#15171e">
+<meta name="apple-mobile-web-app-title" content="vodsync">
+<meta name="theme-color" content="#0e0e10">
 <script>
-(function(){try{var c=document.createElement("canvas");c.width=c.height=180;var x=c.getContext("2d");x.fillStyle="#15171e";x.fillRect(0,0,180,180);
-["#f2b84b","#6cc48c","#78a0f0","#e66e78"].forEach(function(col,i){x.fillStyle=col;x.fillRect(24+(i%2)*70,24+Math.floor(i/2)*70,62,62)});
-x.fillStyle="#15171e";x.beginPath();x.moveTo(76,64);x.lineTo(76,116);x.lineTo(118,90);x.fill();var u=c.toDataURL("image/png");
+(function(){try{var c=document.createElement("canvas");c.width=c.height=180;var x=c.getContext("2d");x.fillStyle="#0e0e10";x.fillRect(0,0,180,180);
+["#9147ff","#6cc48c","#78a0f0","#e66e78"].forEach(function(col,i){x.fillStyle=col;x.fillRect(24+(i%2)*70,24+Math.floor(i/2)*70,62,62)});
+x.fillStyle="#0e0e10";x.beginPath();x.moveTo(76,64);x.lineTo(76,116);x.lineTo(118,90);x.fill();var u=c.toDataURL("image/png");
 ["apple-touch-icon","icon"].forEach(function(r){var l=document.createElement("link");l.rel=r;l.href=u;document.head.appendChild(l)})}catch(e){}})();
 </script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Pixelify+Sans:wght@600&display=swap">
 <style>
-/* Layout: one-screen video wall - tiles absolutely placed above a fixed control dock. Deliberately dark-only (video viewing). */
 :root{
-  --bg:#15171e; --panel:#1d2029; --panel-2:#262a35; --line:#323745;
-  --fg:#e9e7e1; --muted:#9a9eab; --accent:#f2b84b; --accent-ink:#1b1608;
+  --bg:#0e0e10; --panel:#18181b; --panel-2:#26262c; --line:#35353b;
+  --fg:#efeff1; --muted:#adadb8; --accent:#9147ff; --accent-ink:#fff;
   --ok:#6cc48c; --warn:#f0a35a; --bad:#e8707a;
-  --f-logo:"Pixelify Sans", ui-monospace, monospace;
-  --f-body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --f-mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --f-logo:inherit;
+  --f-body:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --f-mono:ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px);
   --safe-l:env(safe-area-inset-left,0px); --safe-r:env(safe-area-inset-right,0px);
   color-scheme:dark;
@@ -37,7 +34,6 @@ button{font:inherit;color:inherit}
 [hidden]{display:none!important}
 .mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 
-/* ---------- wall ---------- */
 #wall{position:relative;flex:1;min-height:0;margin:6px}
 .tile{position:absolute;background:#000;border-radius:8px;overflow:hidden;outline:2px solid transparent;transition:outline-color .15s}
 .tile.loud{outline-color:var(--accent)}
@@ -60,15 +56,13 @@ body.unlocked .shield{pointer-events:none}
 .vol input{width:110px;accent-color:var(--accent)}
 body.ios .vol input{display:none}
 body.ios .vol{padding-right:4px}
-.offline{position:absolute;inset:0;z-index:2;display:grid;place-content:center;text-align:center;gap:4px;background:#0e0f14;color:var(--muted);padding:12px}
+.offline{position:absolute;inset:0;z-index:2;display:grid;place-content:center;text-align:center;gap:4px;background:#000;color:var(--muted);padding:12px}
 .offline b{color:var(--fg);font-size:17px}
 .offline .mono{font-size:22px;color:var(--fg)}
 
-/* ---------- unlocked banner ---------- */
 #unlockBanner{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:10;background:var(--warn);color:#1e1306;
   padding:8px 14px;border-radius:10px;font-weight:600;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,.4);max-width:calc(100% - 32px);text-align:center}
 
-/* ---------- dock ---------- */
 #dock{background:var(--panel);border-top:1px solid var(--line);padding:8px 12px calc(8px + var(--safe-b));display:flex;flex-direction:column;gap:6px}
 .scrubrow{display:flex;align-items:center;gap:10px}
 .scrubrow .mono{font-size:13px;color:var(--muted);white-space:nowrap}
@@ -90,13 +84,12 @@ body.ios .vol{padding-right:4px}
 .pill{height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2);display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;font-weight:500;max-width:280px}
 .pill span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pill.ok{border-color:color-mix(in srgb,var(--ok) 60%,transparent)} .pill.bad{border-color:var(--bad);color:var(--bad)}
-.logo{font-family:var(--f-logo);font-size:18px;letter-spacing:.02em;color:var(--accent)}
+.logo{font-weight:700;font-size:17px;color:var(--fg)}
 @media (max-width:820px){ .hide-s{display:none!important} .btn.skip{padding:0 7px} }
 
-/* ---------- sheets ---------- */
 .sheet-bg{position:fixed;inset:0;z-index:50;background:rgba(6,7,10,.72);display:flex;align-items:flex-start;justify-content:center;overflow:auto;
   padding:calc(var(--safe-t) + 24px) 16px calc(var(--safe-b) + 24px)}
-.sheet{width:100%;max-width:720px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:20px}
+.sheet{width:100%;max-width:720px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:20px}
 .sheet h2{margin:0;font-size:20px;text-wrap:balance}
 .sheet h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
 .sheet section{display:flex;flex-direction:column;gap:10px}
@@ -156,7 +149,7 @@ a.btn{text-decoration:none}
   </div>
   <div class="controls">
     <div class="grp">
-      <button class="btn ghost hide-s" id="bSessions" title="Sitzungen"><span class="logo">VOD Sync</span></button>
+      <button class="btn ghost hide-s" id="bSessions" title="Sitzungen"><span class="logo">vodsync</span></button>
       <button class="btn" id="bStart" title="Von Anfang an"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg><span class="hide-s">Anfang</span></button>
       <button class="btn primary" id="bJump"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Springen</button>
     </div>
@@ -182,10 +175,9 @@ a.btn{text-decoration:none}
   </div>
 </div>
 
-<!-- Setup / sessions -->
 <div class="sheet-bg" id="setup" hidden>
   <div class="sheet">
-    <div class="head"><span class="logo">VOD Sync</span><span style="flex:1"></span><button class="btn ghost" id="closeSetup" hidden>Schließen</button></div>
+    <div class="head"><span class="logo">vodsync</span><span style="flex:1"></span><button class="btn ghost" id="closeSetup" hidden>Schließen</button></div>
 
     <section id="secSaved" hidden>
       <h3>Gespeicherte Sitzungen</h3>
@@ -229,7 +221,6 @@ a.btn{text-decoration:none}
   </div>
 </div>
 
-<!-- Jump -->
 <div class="sheet-bg" id="jump" hidden>
   <div class="sheet">
     <h2>Wo warst du stehen geblieben?</h2>
@@ -264,11 +255,9 @@ a.btn{text-decoration:none}
 <script src="https://player.twitch.tv/js/embed/v1.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
-"use strict";
-/* ================= helpers ================= */
 const $=s=>document.querySelector(s);
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-const COLORS=["#f2b84b","#6cc48c","#78a0f0","#e66e78","#c79bf2","#5fd0d6"];
+const COLORS=["#bf94ff","#6cc48c","#78a0f0","#e66e78","#c79bf2","#5fd0d6"];
 const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
 if(isIOS)document.body.classList.add("ios");
 const fmt=s=>{s=Math.max(0,Math.floor(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h+":"+String(m).padStart(2,"0")+":"+String(x).padStart(2,"0")};
@@ -285,7 +274,6 @@ const ICON={
   mute:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>'
 };
 
-/* ================= state ================= */
 const S={
   clientId:LS.get("vs.clientId","")||"w71y0nig0v9inlw45ujqieaafbmedd", token:LS.get("vs.token",""),
   sessions:LS.get("vs.sessions",[]), session:null,
@@ -297,7 +285,6 @@ const S={
 const now=()=>S.playing?S.baseT+(performance.now()-S.baseWall):S.baseT;
 const bounds=()=>{let a=Infinity,b=-Infinity;for(const st of S.session.streamers)for(const g of st.segments){a=Math.min(a,g.start);b=Math.max(b,g.start+g.dur*1000)}return[a,b]};
 
-/* ================= Twitch auth / API ================= */
 const redirectUri=()=>location.origin+location.pathname;
 (function handleOAuth(){
   if(!location.hash.includes("access_token"))return;
@@ -322,7 +309,6 @@ async function helix(path){
 }
 const toSeg=v=>({id:v.id,start:Date.parse(v.created_at),dur:parseDur(v.duration),title:v.title,login:v.user_login,name:v.user_name});
 
-/* ================= setup sheet ================= */
 function renderAuth(){
   const ok=!!(S.token&&S.clientId);
   const el=$("#authStatus");
@@ -419,7 +405,6 @@ function createSession(){
   openSession(sess.id);
 }
 
-/* ================= session / players ================= */
 function openSession(id){
   const sess=S.sessions.find(s=>s.id===id);if(!sess)return;
   teardown();
@@ -465,7 +450,6 @@ function solo(i){
   S.focus=i;layout();
 }
 
-/* core: bring one tile to the global time */
 function apply(t,force){
   const T=now(),seg=segAt(t.st,T),P=t.player;
   if(!seg){
@@ -490,7 +474,6 @@ function apply(t,force){
   const nowW=performance.now();
   if(force){P.seek(Math.max(0,off));t.cool=nowW+4000;t.drift=0;t.state="ok";t.lastCur=-1;return}
   t.drift=cur-off;
-  // stall detection (buffering)
   if(S.playing&&!P.isPaused()){ if(Math.abs(cur-t.lastCur)<0.05)t.stall++;else t.stall=0 }else t.stall=0;
   t.lastCur=cur;
   if(nowW<t.cool){t.state="ok";return}
@@ -498,7 +481,6 @@ function apply(t,force){
   if(S.autoSync&&S.locked&&S.playing&&Math.abs(t.drift)>4){P.seek(Math.max(0,off));t.cool=nowW+5000;t.state="ok"}
 }
 
-/* ================= time control ================= */
 function setT(T,play){
   if(!S.session)return;
   const [a,b]=bounds();
@@ -509,7 +491,6 @@ function setT(T,play){
 }
 function togglePlay(){
   S.baseT=now();S.baseWall=performance.now();S.playing=!S.playing;
-  // call play/pause directly inside the tap (helps iOS)
   S.tiles.forEach(t=>{if(!t.ready)return;try{const seg=segAt(t.st,now());if(S.playing&&seg)t.player.play();else t.player.pause()}catch(e){}});
   S.tiles.forEach(t=>apply(t,true));
   wake();renderControls();savePos();
@@ -518,7 +499,6 @@ function syncNow(){S.baseT=now();S.baseWall=performance.now();S.tiles.forEach(t=
 let lastSave=0;
 function savePos(){if(!S.session)return;S.session.pos=now();LS.set("vs.sessions",S.sessions);lastSave=performance.now()}
 
-/* ================= render ================= */
 function renderTile(t){
   const off=t.el.querySelector(".offline"),T=now(),seg=segAt(t.st,T);
   const vb=t.el.querySelector(".vbtn");
@@ -583,7 +563,6 @@ function layout(){
     place(t,ox+(j%g.c)*(g.w+6),oy+r*(g.h+6),g.w,g.h)});
 }
 
-/* ================= jump dialog ================= */
 const J={st:0,seg:0};
 function openJump(){
   if(!S.session)return;
@@ -620,7 +599,6 @@ function previewJump(){
   pv.innerHTML=(over?`<div style="color:var(--warn)">Das VOD ist nur ${fmt(g.dur)} lang, ich springe ans Ende.</div>`:"")+`<div>Danach stehen alle so:</div>`+lines.join("");
   renderLinks(T);
 }
-/* Use case 2: timestamped links for the Twitch app on other devices */
 const twLink=(id,off)=>{off=Math.floor(off);return `https://www.twitch.tv/videos/${id}?t=${Math.floor(off/3600)}h${Math.floor(off%3600/60)}m${off%60}s`};
 function renderLinks(T){
   const box=$("#jLinks");box.innerHTML="";
@@ -650,7 +628,6 @@ $("#jCancel").onclick=()=>$("#jump").hidden=true;
 $("#jGo").onclick=()=>{setT(jumpTarget().T,false);$("#jump").hidden=true};
 $("#jFromStart").onclick=()=>{setT(bounds()[0],false);$("#jump").hidden=true};
 
-/* ================= wiring ================= */
 let scrubbing=false;
 $("#scrub").addEventListener("input",e=>{scrubbing=true;const [a,b]=bounds();$("#tNow").textContent=fmt((e.target.value/1000*(b-a))/1000)});
 $("#scrub").addEventListener("change",e=>{scrubbing=false;const [a,b]=bounds();setT(a+e.target.value/1000*(b-a))});
@@ -696,7 +673,6 @@ function tick(){
 }
 setInterval(tick,500);
 
-/* ================= boot ================= */
 (function boot(){
   const y=new Date(Date.now()-86400000);$("#sDate").value=y.getFullYear()+"-"+String(y.getMonth()+1).padStart(2,"0")+"-"+String(y.getDate()).padStart(2,"0");
   renderControls();
