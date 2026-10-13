@@ -421,7 +421,7 @@ function openSession(id){
       <input class="vrange" type="range" min="0" max="100" value="100" aria-label="Lautstärke ${esc(st.name)}"><button class="vbtn" aria-label="Ton an/aus"></button></div>
       <div class="pbox"><div class="player" id="pl${i}"></div><div class="offline" hidden></div></div>`;
     wall.appendChild(el);
-    const t={st,el,i,player:null,ready:false,started:false,playReq:0,segId:null,muted:i!==0,vol:1,drift:0,cool:0,ours:0,lastCur:-1,stall:0,state:"loading"};
+    const t={st,el,i,player:null,ready:false,started:false,playReq:0,segId:null,muted:i!==0,vol:1,drift:0,cool:0,ours:0,paused:true,raw:-1,rawAt:0,state:"loading"};
     el.querySelector(".thead").addEventListener("click",()=>solo(i));
     el.querySelector(".vbtn").addEventListener("click",e=>{e.stopPropagation();t.muted=!t.muted;applyAudio(t);renderTile(t)});
     const vr=el.querySelector(".vrange");vr.addEventListener("click",e=>e.stopPropagation());
@@ -445,17 +445,23 @@ function createPlayer(t){
   t.player=new Twitch.Player("pl"+t.i,{width:"100%",height:"100%",video:seg.id,time:`${h}h${m}m${s}s`,autoplay:false,muted:true,parent:[location.hostname]});
   const P=t.player;
   P.addEventListener(Twitch.Player.READY,()=>{t.ready=true;t.cool=performance.now()+3000;apply(t,true)});
-  P.addEventListener(Twitch.Player.PLAYING,()=>{if(!t.started){t.started=true;applyAudio(t)}});
-  P.addEventListener(Twitch.Player.PLAY,()=>userEvt(t,"play"));
-  P.addEventListener(Twitch.Player.PAUSE,()=>userEvt(t,"pause"));
-  P.addEventListener(Twitch.Player.SEEK,()=>userEvt(t,"seek"));
+  P.addEventListener(Twitch.Player.PLAYING,()=>{t.paused=false;if(!t.started){t.started=true;applyAudio(t)}});
+  P.addEventListener(Twitch.Player.PLAY,()=>{t.paused=false;userEvt(t,"play")});
+  P.addEventListener(Twitch.Player.PAUSE,()=>{t.paused=true;userEvt(t,"pause")});
+  P.addEventListener(Twitch.Player.ENDED,()=>{t.paused=true});
+  P.addEventListener(Twitch.Player.SEEK,e=>{t.raw=-1;userEvt(t,"seek",e&&typeof e.position==="number"?e.position:null)});
 }
 const sheetOpen=()=>!$("#setup").hidden||!$("#jump").hidden||!$("#share").hidden;
-function userEvt(t,kind){
+function curOf(t){
+  const c=t.player.getCurrentTime(),n=performance.now();
+  if(c!==t.raw){t.raw=c;t.rawAt=n}
+  return t.paused?c:c+(n-t.rawAt)/1000;
+}
+function userEvt(t,kind,pos){
   if(performance.now()<t.ours||sheetOpen()||document.hidden||!S.session)return;
   if(kind==="pause"&&S.playing){S.baseT=now();S.baseWall=performance.now();S.playing=false;S.tiles.forEach(x=>{if(x!==t)apply(x,true)});t.ours=performance.now()+1500;renderControls();savePos()}
   else if(kind==="play"&&!S.playing){S.baseT=now();S.baseWall=performance.now();S.playing=true;S.tiles.forEach(x=>{if(x!==t)apply(x,true)});t.ours=performance.now()+1500;renderControls();wake()}
-  else if(kind==="seek"){setTimeout(()=>{const seg=t.st.segments.find(g=>g.id===t.segId);if(!seg)return;const nt=seg.start+t.player.getCurrentTime()*1000;if(Math.abs(nt-now())>3000)setT(nt)},400)}
+  else if(kind==="seek"){setTimeout(()=>{const seg=t.st.segments.find(g=>g.id===t.segId);if(!seg)return;const nt=seg.start+(pos!=null?pos:t.player.getCurrentTime())*1000;if(Math.abs(nt-now())>3000)setT(nt)},pos!=null?0:800)}
 }
 function applyAudio(t){
   if(!t.ready||!t.started)return;
@@ -470,7 +476,7 @@ function apply(t,force){
   if(!seg){
     const next=t.st.segments.find(g=>g.start>T);
     t.state=next?"waiting":"ended";t.next=next;
-    if(t.ready&&!P.isPaused()){t.ours=performance.now()+1500;P.pause()}
+    if(t.ready&&!t.paused){t.ours=performance.now()+1500;P.pause()}
     return;
   }
   const off=(T-seg.start)/1000;
@@ -482,19 +488,17 @@ function apply(t,force){
   }
   if(!t.ready){t.state="loading";return}
   if(!sheetOpen()){
-    if(S.playing&&P.isPaused()){t.ours=performance.now()+1500;if(!t.started&&!t.playReq)t.playReq=performance.now();P.play()}
-    if(!S.playing&&!P.isPaused()){t.ours=performance.now()+1500;P.pause()}
+    if(S.playing&&t.paused){t.ours=performance.now()+1500;if(!t.started&&!t.playReq)t.playReq=performance.now();P.play()}
+    if(!S.playing&&!t.paused){t.ours=performance.now()+1500;P.pause()}
   }
-  const cur=P.getCurrentTime();
+  const cur=curOf(t);
   const nowW=performance.now();
-  if(force){t.ours=nowW+2000;P.seek(Math.max(0,off));t.cool=nowW+4000;t.drift=0;t.state="ok";t.lastCur=-1;return}
+  if(force){t.ours=nowW+2000;P.seek(Math.max(0,off));t.cool=nowW+4000;t.drift=0;t.state="ok";t.raw=-1;return}
   if(!S.playing)t.playReq=0;
   if(!t.started){t.drift=0;t.state=S.playing&&t.playReq&&nowW-t.playReq>5000?"blocked":"ok";return}
   t.drift=cur-off;
-  if(S.playing&&!P.isPaused()){ if(Math.abs(cur-t.lastCur)<0.05)t.stall++;else t.stall=0 }else t.stall=0;
-  t.lastCur=cur;
   if(nowW<t.cool){t.state="ok";return}
-  t.state=t.stall>=3?"buffer":(Math.abs(t.drift)>2?"drift":"ok");
+  t.state=Math.abs(t.drift)>2.5?"drift":"ok";
   if(S.autoSync&&S.playing&&!sheetOpen()&&Math.abs(t.drift)>4){t.ours=nowW+2000;P.seek(Math.max(0,off));t.cool=nowW+5000;t.state="ok"}
 }
 
