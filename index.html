@@ -34,34 +34,30 @@ button{font:inherit;color:inherit}
 [hidden]{display:none!important}
 .mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 
-#wall{position:relative;flex:1;min-height:0;margin:6px}
-.tile{position:absolute;background:#000;border-radius:8px;overflow:hidden;outline:2px solid transparent;transition:outline-color .15s}
+#wall{position:relative;flex:1;min-height:0;margin:6px;overflow:auto}
+.tile{position:absolute;display:flex;flex-direction:column;background:var(--panel);border-radius:8px;overflow:hidden;outline:2px solid transparent;transition:outline-color .15s}
 .tile.loud{outline-color:var(--accent)}
-.tile .player,.tile .player iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
-.shield{position:absolute;inset:0;z-index:2;cursor:pointer}
-body.unlocked .shield{pointer-events:none}
-.tbar{position:absolute;left:0;right:0;top:0;z-index:3;display:flex;align-items:center;gap:8px;padding:6px 8px;
-  background:linear-gradient(rgba(10,11,15,.85),rgba(10,11,15,0));pointer-events:none}
-.tbar>*{pointer-events:auto}
+.thead{flex:none;height:42px;display:flex;align-items:center;gap:8px;padding:0 6px 0 10px;cursor:pointer;min-width:0}
+.pbox{position:relative;flex:1;min-height:0;background:#000}
+.pbox .player,.pbox .player iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .chip{width:10px;height:10px;border-radius:3px;flex:none}
 .tname{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.ttime{font-size:12.5px;color:var(--muted);white-space:nowrap}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none;margin-left:auto}
+.ttime{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
 .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.bad{background:var(--bad)}
-.vol{position:absolute;left:8px;bottom:8px;z-index:3;display:flex;align-items:center;gap:6px;
-  background:rgba(10,11,15,.78);border-radius:999px;padding:4px 10px 4px 4px;backdrop-filter:blur(6px)}
-.vbtn{width:38px;height:38px;border-radius:50%;border:0;background:var(--panel-2);display:grid;place-items:center;cursor:pointer}
+.tsp{flex:1}
+.vbtn{width:34px;height:34px;border-radius:50%;border:0;background:var(--panel-2);display:grid;place-items:center;cursor:pointer;flex:none}
 .vbtn.on{background:var(--accent);color:var(--accent-ink)}
-.vbtn svg{width:20px;height:20px}
-.vol input{width:110px;accent-color:var(--accent)}
-body.ios .vol input{display:none}
-body.ios .vol{padding-right:4px}
+.vbtn svg{width:18px;height:18px}
+.vrange{width:90px;accent-color:var(--accent);flex:none}
+body.ios .vrange{display:none}
 .offline{position:absolute;inset:0;z-index:2;display:grid;place-content:center;text-align:center;gap:4px;background:#000;color:var(--muted);padding:12px}
 .offline b{color:var(--fg);font-size:17px}
 .offline .mono{font-size:22px;color:var(--fg)}
-
-#unlockBanner{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:10;background:var(--warn);color:#1e1306;
-  padding:8px 14px;border-radius:10px;font-weight:600;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,.4);max-width:calc(100% - 32px);text-align:center}
+#toast{position:fixed;left:50%;bottom:calc(var(--safe-b) + 120px);transform:translateX(-50%);z-index:80;background:var(--panel-2);border:1px solid var(--line);
+  padding:10px 16px;border-radius:10px;font-weight:600;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,.4);max-width:calc(100% - 32px);text-align:center}
+.qrbox{background:#fff;padding:14px;border-radius:10px;align-self:center;line-height:0}
+.qrbox svg{width:260px;height:260px;max-width:70vw;max-height:70vw}
 
 #dock{background:var(--panel);border-top:1px solid var(--line);padding:8px 12px calc(8px + var(--safe-b));display:flex;flex-direction:column;gap:6px}
 .scrubrow{display:flex;align-items:center;gap:10px}
@@ -133,13 +129,14 @@ textarea{min-height:110px;resize:vertical;font-family:var(--f-mono);font-size:14
 .lact{display:flex;gap:8px;flex-wrap:wrap}
 a.btn{text-decoration:none}
 .qr{background:#fff;padding:12px;border-radius:10px;align-self:flex-start}
-.qr img,.qr canvas{display:block}
+.qr{line-height:0}.qr svg{width:200px;height:200px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
 
-<div id="wall"><div id="unlockBanner" hidden>Entsperrt: Tippe in jedem Player einmal auf Play, falls einer nicht startet. Danach wieder sperren.</div></div>
+<div id="wall"></div>
+<div id="toast" hidden></div>
 
 <div id="dock" hidden>
   <div class="scrubrow">
@@ -167,8 +164,7 @@ a.btn{text-decoration:none}
     <div class="grp">
       <button class="pill" id="bSync" title="Tippen: alle neu synchronisieren"><span class="dot" id="syncDot"></span><span id="syncText">Synchron</span></button>
       <button class="btn" id="bAuto" title="Auto-Sync: korrigiert Abweichungen automatisch">Auto</button>
-      <button class="btn" id="bLock" title="Player sperren/entsperren"></button>
-      <button class="btn hide-s" id="bLayout" title="Layout wechseln"></button>
+      <button class="btn" id="bShare" title="Sitzung auf ein anderes Gerät holen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="11" height="15" rx="2"/><rect x="15" y="9" width="6" height="11" rx="1.5"/><path d="M7 16h3"/></svg><span class="hide-s">Gerät wechseln</span></button>
       <button class="btn" id="bFull" title="Vollbild"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
       <button class="btn" id="bSessions2" title="Sitzungen" aria-label="Sitzungen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     </div>
@@ -252,8 +248,18 @@ a.btn{text-decoration:none}
   </div>
 </div>
 
+<div class="sheet-bg" id="share" hidden>
+  <div class="sheet">
+    <h2 id="shTitle">Auf anderem Gerät weiterschauen</h2>
+    <p>Scanne den Code mit der Kamera vom iPad oder Handy. Die Sitzung wird dort übernommen, an genau dieser Stelle.</p>
+    <div class="qrbox" id="shQr"></div>
+    <div class="copybox"><code id="shUrl"></code><button class="btn" id="shCopy">Kopieren</button></div>
+    <div class="actions"><button class="btn primary" id="shClose">Fertig</button></div>
+  </div>
+</div>
+
 <script src="https://player.twitch.tv/js/embed/v1.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script>
 const $=s=>document.querySelector(s);
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
@@ -266,10 +272,6 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
 const ICON={
   play:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>',
   pause:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
-  lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
-  unlock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/></svg>',
-  grid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="8" height="7" rx="1"/><rect x="13" y="4" width="8" height="7" rx="1"/><rect x="3" y="13" width="8" height="7" rx="1"/><rect x="13" y="13" width="8" height="7" rx="1"/></svg>',
-  focus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="13" height="16" rx="1"/><rect x="18" y="4" width="3" height="7" rx="1"/><rect x="18" y="13" width="3" height="7" rx="1"/></svg>',
   spk:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 8a5 5 0 0 1 0 8M18.5 5.5a8.5 8.5 0 0 1 0 13"/></svg>',
   mute:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>'
 };
@@ -278,8 +280,8 @@ const S={
   clientId:LS.get("vs.clientId","")||"w71y0nig0v9inlw45ujqieaafbmedd", token:LS.get("vs.token",""),
   sessions:LS.get("vs.sessions",[]), session:null,
   playing:false, baseT:0, baseWall:0,
-  tiles:[], layout:LS.get("vs.layout","grid"), focus:0,
-  locked:true, autoSync:LS.get("vs.auto",true),
+  tiles:[],
+  autoSync:LS.get("vs.auto",true),
   found:null, startAt:null
 };
 const now=()=>S.playing?S.baseT+(performance.now()-S.baseWall):S.baseT;
@@ -326,10 +328,11 @@ function renderSaved(){
     const [a]=boundsOf(sess);
     const pos=sess.pos?fmt((sess.pos-a)/1000):"0:00:00";
     div.innerHTML=`<div class="meta"><div style="font-weight:600">${esc(sess.name)}</div><div class="s">${sess.streamers.map(s=>esc(s.name)).join(" · ")} - Timeline ${pos}</div></div>
-      <button class="btn primary" data-a="open">Weiterschauen</button><button class="btn ghost" data-a="del">Löschen</button>`;
+      <button class="btn primary" data-a="open">Weiterschauen</button><button class="btn" data-a="share">Teilen</button><button class="btn ghost" data-a="del">Löschen</button>`;
     div.addEventListener("click",e=>{
       const a=e.target.closest("button")?.dataset.a;
       if(a==="open")openSession(sess.id);
+      if(a==="share")openShare(sess);
       if(a==="del"){const b=e.target.closest("button");
         if(b.dataset.confirm){S.sessions=S.sessions.filter(x=>x.id!==sess.id);LS.set("vs.sessions",S.sessions);renderSaved()}
         else{b.dataset.confirm="1";b.textContent="Wirklich löschen?";b.classList.remove("ghost");setTimeout(()=>{if(b.isConnected){delete b.dataset.confirm;b.textContent="Löschen";b.classList.add("ghost")}},4000)}}
@@ -410,18 +413,19 @@ function openSession(id){
   teardown();
   S.session=sess;
   const [a]=bounds();
-  S.baseT=sess.pos||a;S.baseWall=performance.now();S.playing=false;S.focus=0;
+  S.baseT=sess.pos||a;S.baseWall=performance.now();S.playing=false;
   const wall=$("#wall");
   sess.streamers.forEach((st,i)=>{
     const el=document.createElement("div");el.className="tile";
-    el.innerHTML=`<div class="player" id="pl${i}"></div><div class="offline" hidden></div><div class="shield"></div>
-      <div class="tbar"><span class="chip" style="background:${COLORS[i%COLORS.length]}"></span><span class="tname">${esc(st.name)}</span><span class="ttime mono"></span><span class="dot"></span></div>
-      <div class="vol"><button class="vbtn" aria-label="Ton an/aus"></button><input type="range" min="0" max="100" value="100" aria-label="Lautstärke ${esc(st.name)}"></div>`;
+    el.innerHTML=`<div class="thead"><span class="chip" style="background:${COLORS[i%COLORS.length]}"></span><span class="tname">${esc(st.name)}</span><span class="ttime mono"></span><span class="dot"></span><span class="tsp"></span>
+      <input class="vrange" type="range" min="0" max="100" value="100" aria-label="Lautstärke ${esc(st.name)}"><button class="vbtn" aria-label="Ton an/aus"></button></div>
+      <div class="pbox"><div class="player" id="pl${i}"></div><div class="offline" hidden></div></div>`;
     wall.appendChild(el);
-    const t={st,el,i,player:null,ready:false,segId:null,muted:i!==0,vol:1,drift:0,cool:0,lastCur:-1,stall:0,state:"loading"};
-    el.querySelector(".shield").addEventListener("click",()=>solo(i));
+    const t={st,el,i,player:null,ready:false,started:false,segId:null,muted:i!==0,vol:1,drift:0,cool:0,ours:0,lastCur:-1,stall:0,state:"loading"};
+    el.querySelector(".thead").addEventListener("click",()=>solo(i));
     el.querySelector(".vbtn").addEventListener("click",e=>{e.stopPropagation();t.muted=!t.muted;applyAudio(t);renderTile(t)});
-    el.querySelector(".vol input").addEventListener("input",e=>{t.vol=e.target.value/100;if(t.vol>0)t.muted=false;applyAudio(t);renderTile(t)});
+    const vr=el.querySelector(".vrange");vr.addEventListener("click",e=>e.stopPropagation());
+    vr.addEventListener("input",e=>{t.vol=e.target.value/100;if(t.vol>0)t.muted=false;applyAudio(t);renderTile(t)});
     S.tiles.push(t);
     createPlayer(t);
   });
@@ -439,15 +443,26 @@ function createPlayer(t){
   t.segId=seg.id;
   const h=Math.floor(off/3600),m=Math.floor(off%3600/60),s=Math.floor(off%60);
   t.player=new Twitch.Player("pl"+t.i,{width:"100%",height:"100%",video:seg.id,time:`${h}h${m}m${s}s`,autoplay:false,muted:true,parent:[location.hostname]});
-  t.player.addEventListener(Twitch.Player.READY,()=>{t.ready=true;applyAudio(t);t.cool=performance.now()+3000;apply(t,true)});
+  const P=t.player;
+  P.addEventListener(Twitch.Player.READY,()=>{t.ready=true;t.cool=performance.now()+3000;apply(t,true)});
+  P.addEventListener(Twitch.Player.PLAYING,()=>{if(!t.started){t.started=true;applyAudio(t)}});
+  P.addEventListener(Twitch.Player.PLAY,()=>userEvt(t,"play"));
+  P.addEventListener(Twitch.Player.PAUSE,()=>userEvt(t,"pause"));
+  P.addEventListener(Twitch.Player.SEEK,()=>userEvt(t,"seek"));
+}
+const sheetOpen=()=>!$("#setup").hidden||!$("#jump").hidden||!$("#share").hidden;
+function userEvt(t,kind){
+  if(performance.now()<t.ours||sheetOpen()||document.hidden||!S.session)return;
+  if(kind==="pause"&&S.playing){S.baseT=now();S.baseWall=performance.now();S.playing=false;S.tiles.forEach(x=>{if(x!==t)apply(x,true)});t.ours=performance.now()+1500;renderControls();savePos()}
+  else if(kind==="play"&&!S.playing){S.baseT=now();S.baseWall=performance.now();S.playing=true;S.tiles.forEach(x=>{if(x!==t)apply(x,true)});t.ours=performance.now()+1500;renderControls();wake()}
+  else if(kind==="seek"){setTimeout(()=>{const seg=t.st.segments.find(g=>g.id===t.segId);if(!seg)return;const nt=seg.start+t.player.getCurrentTime()*1000;if(Math.abs(nt-now())>3000)setT(nt)},400)}
 }
 function applyAudio(t){
-  if(!t.ready)return;
+  if(!t.ready||!t.started)return;
   try{t.player.setMuted(t.muted);if(!isIOS)t.player.setVolume(t.vol)}catch(e){}
 }
 function solo(i){
   S.tiles.forEach(t=>{t.muted=t.i!==i;applyAudio(t);renderTile(t)});
-  S.focus=i;layout();
 }
 
 function apply(t,force){
@@ -455,30 +470,30 @@ function apply(t,force){
   if(!seg){
     const next=t.st.segments.find(g=>g.start>T);
     t.state=next?"waiting":"ended";t.next=next;
-    if(t.ready&&!P.isPaused())P.pause();
+    if(t.ready&&!P.isPaused()){t.ours=performance.now()+1500;P.pause()}
     return;
   }
   const off=(T-seg.start)/1000;
   if(t.segId!==seg.id){
-    t.segId=seg.id;t.state="loading";t.cool=performance.now()+5000;
+    t.segId=seg.id;t.state="loading";t.cool=performance.now()+5000;t.ours=performance.now()+4000;
     try{P.setVideo(seg.id,off)}catch(e){}
     if(S.playing)setTimeout(()=>{try{P.play()}catch(e){}},900);
     return;
   }
   if(!t.ready){t.state="loading";return}
-  if(S.locked||force){
-    if(S.playing&&P.isPaused())P.play();
-    if(!S.playing&&!P.isPaused())P.pause();
+  if(!sheetOpen()){
+    if(S.playing&&P.isPaused()){t.ours=performance.now()+1500;P.play()}
+    if(!S.playing&&!P.isPaused()){t.ours=performance.now()+1500;P.pause()}
   }
   const cur=P.getCurrentTime();
   const nowW=performance.now();
-  if(force){P.seek(Math.max(0,off));t.cool=nowW+4000;t.drift=0;t.state="ok";t.lastCur=-1;return}
+  if(force){t.ours=nowW+2000;P.seek(Math.max(0,off));t.cool=nowW+4000;t.drift=0;t.state="ok";t.lastCur=-1;return}
   t.drift=cur-off;
   if(S.playing&&!P.isPaused()){ if(Math.abs(cur-t.lastCur)<0.05)t.stall++;else t.stall=0 }else t.stall=0;
   t.lastCur=cur;
   if(nowW<t.cool){t.state="ok";return}
   t.state=t.stall>=3?"buffer":(Math.abs(t.drift)>2?"drift":"ok");
-  if(S.autoSync&&S.locked&&S.playing&&Math.abs(t.drift)>4){P.seek(Math.max(0,off));t.cool=nowW+5000;t.state="ok"}
+  if(S.autoSync&&S.playing&&!sheetOpen()&&Math.abs(t.drift)>4){t.ours=nowW+2000;P.seek(Math.max(0,off));t.cool=nowW+5000;t.state="ok"}
 }
 
 function setT(T,play){
@@ -491,7 +506,7 @@ function setT(T,play){
 }
 function togglePlay(){
   S.baseT=now();S.baseWall=performance.now();S.playing=!S.playing;
-  S.tiles.forEach(t=>{if(!t.ready)return;try{const seg=segAt(t.st,now());if(S.playing&&seg)t.player.play();else t.player.pause()}catch(e){}});
+  S.tiles.forEach(t=>{if(!t.ready)return;t.ours=performance.now()+1500;try{const seg=segAt(t.st,now());if(S.playing&&seg)t.player.play();else t.player.pause()}catch(e){}});
   S.tiles.forEach(t=>apply(t,true));
   wake();renderControls();savePos();
 }
@@ -503,7 +518,7 @@ function renderTile(t){
   const off=t.el.querySelector(".offline"),T=now(),seg=segAt(t.st,T);
   const vb=t.el.querySelector(".vbtn");
   vb.innerHTML=t.muted?ICON.mute:ICON.spk;vb.classList.toggle("on",!t.muted);
-  t.el.querySelector(".vol input").value=Math.round(t.vol*100);
+  t.el.querySelector(".vrange").value=Math.round(t.vol*100);
   t.el.classList.toggle("loud",!t.muted);
   const tt=t.el.querySelector(".ttime"),dot=t.el.querySelector(".dot");
   if(seg){
@@ -534,33 +549,20 @@ function render(){
 function renderControls(){
   const p=$("#bPlay");p.innerHTML=S.playing?ICON.pause:ICON.play;p.setAttribute("aria-label",S.playing?"Pause":"Abspielen");
   $("#bAuto").classList.toggle("on",S.autoSync);
-  const l=$("#bLock");l.innerHTML=(S.locked?ICON.lock:ICON.unlock)+`<span class="hide-s">${S.locked?"Gesperrt":"Entsperrt"}</span>`;l.classList.toggle("on",!S.locked);
-  document.body.classList.toggle("unlocked",!S.locked);$("#unlockBanner").hidden=S.locked;
-  $("#bLayout").innerHTML=S.layout==="grid"?ICON.grid:ICON.focus;
 }
-function fit(W,H,n){let best={c:1,w:0,h:0};for(let c=1;c<=n;c++){const r=Math.ceil(n/c);let w=(W-(c-1)*6)/c,h=w*9/16;if(h*r+(r-1)*6>H){h=(H-(r-1)*6)/r;w=h*16/9}if(w>best.w)best={c,w,h,r}}return best}
+const HEAD=42,GAP=6,MINW=400,MINH=300;
 function layout(){
   const wall=$("#wall"),W=wall.clientWidth,H=wall.clientHeight,n=S.tiles.length;if(!n)return;
-  const place=(t,x,y,w,h)=>Object.assign(t.el.style,{left:x+"px",top:y+"px",width:w+"px",height:h+"px"});
-  if(S.layout==="focus"&&n>1){
-    const k=n-1,landscape=W>H*1.1;
-    const f=S.tiles[S.focus]||S.tiles[0],rest=S.tiles.filter(t=>t!==f);
-    if(landscape){
-      let sw=Math.min(W*0.3,((H-(k-1)*6)/k)*16/9),sh=sw*9/16;
-      let fw=Math.min(W-sw-6,H*16/9),fh=fw*9/16;
-      const ox=(W-fw-6-sw)/2;place(f,ox,(H-fh)/2,fw,fh);
-      const tot=k*sh+(k-1)*6;rest.forEach((t,j)=>place(t,ox+fw+6,(H-tot)/2+j*(sh+6),sw,sh));
-    }else{
-      let sw=Math.min((W-(k-1)*6)/k,(H*0.3)*16/9),sh=sw*9/16;
-      let fw=Math.min(W,(H-sh-6)*16/9),fh=fw*9/16;
-      const oy=(H-fh-6-sh)/2;place(f,(W-fw)/2,oy,fw,fh);
-      const tot=k*sw+(k-1)*6;rest.forEach((t,j)=>place(t,(W-tot)/2+j*(sw+6),oy+fh+6,sw,sh));
-    }
-    return;
-  }
-  const g=fit(W,H,n),tot=g.r*g.h+(g.r-1)*6,oy=(H-tot)/2;
-  S.tiles.forEach((t,j)=>{const r=Math.floor(j/g.c),inRow=Math.min(g.c,n-r*g.c),rw=inRow*g.w+(inRow-1)*6,ox=(W-rw)/2;
-    place(t,ox+(j%g.c)*(g.w+6),oy+r*(g.h+6),g.w,g.h)});
+  let best=null;
+  for(let c=1;c<=n;c++){const r=Math.ceil(n/c);let w=(W-(c-1)*GAP)/c,vh=w*9/16;
+    if(r*(vh+HEAD)+(r-1)*GAP>H){vh=(H-(r-1)*GAP)/r-HEAD;w=vh*16/9}
+    if(!best||w>best.w)best={c,r,w,vh}}
+  let {c,r,w,vh}=best;
+  if(vh<MINH){vh=MINH;w=Math.max(w,Math.min((W-(c-1)*GAP)/c,MINH*16/9))}
+  if(w<MINW)w=MINW;
+  const th=vh+HEAD,tot=r*th+(r-1)*GAP,oy=Math.max(0,(H-tot)/2);
+  S.tiles.forEach((t,j)=>{const row=Math.floor(j/c),inRow=Math.min(c,n-row*c),rw=inRow*w+(inRow-1)*GAP,ox=Math.max(0,(W-rw)/2);
+    Object.assign(t.el.style,{left:ox+(j%c)*(w+GAP)+"px",top:oy+row*(th+GAP)+"px",width:w+"px",height:th+"px"})});
 }
 
 const J={st:0,seg:0};
@@ -599,6 +601,38 @@ function previewJump(){
   pv.innerHTML=(over?`<div style="color:var(--warn)">Das VOD ist nur ${fmt(g.dur)} lang, ich springe ans Ende.</div>`:"")+`<div>Danach stehen alle so:</div>`+lines.join("");
   renderLinks(T);
 }
+function qrSvg(text){try{const q=qrcode(0,"L");q.addData(text);q.make();return q.createSvgTag(4,2)}catch(e){return "<span style=\"color:#000\">QR-Code konnte nicht erstellt werden.</span>"}}
+const b64u={enc:s=>btoa(unescape(encodeURIComponent(s))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""),
+  dec:s=>decodeURIComponent(escape(atob(s.replace(/-/g,"+").replace(/_/g,"/"))))};
+function shareUrl(sess){
+  const o={n:sess.name,p:Math.round((sess.pos||boundsOf(sess)[0])/1000),s:sess.streamers.map(st=>[st.login,st.name,st.segments.map(g=>[g.id,Math.round(g.start/1000),g.dur])])};
+  return location.origin+location.pathname+"?s="+b64u.enc(JSON.stringify(o));
+}
+function openShare(sess){
+  if(S.session===sess)savePos();
+  const url=shareUrl(sess);
+  $("#shQr").innerHTML=qrSvg(url);$("#shUrl").textContent=url;$("#shCopy").textContent="Kopieren";
+  $("#shTitle").textContent=sess.name+" auf anderem Gerät";
+  $("#share").hidden=false;
+}
+function importShared(){
+  const code=new URLSearchParams(location.search).get("s");if(!code)return false;
+  history.replaceState(null,"",location.pathname);
+  try{
+    const o=JSON.parse(b64u.dec(code));
+    const streamers=o.s.map(([login,name,segs])=>({login,name,segments:segs.map(([id,st,dur])=>({id,start:st*1000,dur,title:""}))}));
+    const sig=x=>x.streamers.flatMap(st=>st.segments.map(g=>g.id)).sort().join();
+    const nsig=sig({streamers});
+    let sess=S.sessions.find(x=>sig(x)===nsig);
+    if(sess){sess.pos=o.p*1000;sess.name=o.n||sess.name}
+    else{sess={id:Date.now().toString(36),name:o.n||"Sitzung",streamers,pos:o.p*1000};S.sessions.push(sess)}
+    LS.set("vs.sessions",S.sessions);
+    openSession(sess.id);toast("Sitzung übernommen");
+    return true;
+  }catch(e){status("Der Link ist unvollständig oder beschädigt.","err");return false}
+}
+let toastT=0;
+function toast(msg){const el=$("#toast");el.textContent=msg;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,2600)}
 const twLink=(id,off)=>{off=Math.floor(off);return `https://www.twitch.tv/videos/${id}?t=${Math.floor(off/3600)}h${Math.floor(off%3600/60)}m${off%60}s`};
 function renderLinks(T){
   const box=$("#jLinks");box.innerHTML="";
@@ -612,7 +646,7 @@ function renderLinks(T){
       <div class="qr" hidden></div>`;
     row.querySelector('[data-a="copy"]').onclick=e=>{navigator.clipboard?.writeText(url).then(()=>e.target.textContent="Kopiert",()=>{}).catch(()=>{})};
     row.querySelector('[data-a="qr"]').onclick=()=>{const q=row.querySelector(".qr");q.hidden=!q.hidden;
-      if(!q.hidden&&!q.dataset.done){q.dataset.done="1";if(window.QRCode)new QRCode(q,{text:url,width:200,height:200,colorDark:"#000",colorLight:"#fff"});else q.textContent="QR-Code konnte nicht geladen werden."}};
+      if(!q.hidden&&!q.dataset.done){q.dataset.done="1";q.innerHTML=qrSvg(url)}};
     box.appendChild(row);
   });
   if(!box.children.length)box.innerHTML=`<p>Zu dieser Zeit streamt niemand.</p>`;
@@ -637,8 +671,9 @@ $("#bStart").onclick=()=>setT(bounds()[0],false);
 $("#bJump").onclick=openJump;
 $("#bSync").onclick=syncNow;
 $("#bAuto").onclick=()=>{S.autoSync=!S.autoSync;LS.set("vs.auto",S.autoSync);renderControls()};
-$("#bLock").onclick=()=>{S.locked=!S.locked;renderControls();if(S.locked)syncNow()};
-$("#bLayout").onclick=()=>{S.layout=S.layout==="grid"?"focus":"grid";LS.set("vs.layout",S.layout);renderControls();layout()};
+$("#bShare").onclick=()=>{if(S.session)openShare(S.session)};
+$("#shClose").onclick=()=>$("#share").hidden=true;
+$("#shCopy").onclick=e=>{navigator.clipboard?.writeText($("#shUrl").textContent).then(()=>e.target.textContent="Kopiert",()=>{}).catch(()=>{})};
 $("#bFull").onclick=()=>{const d=document,el=d.documentElement;
   if(d.fullscreenElement||d.webkitFullscreenElement){(d.exitFullscreen||d.webkitExitFullscreen).call(d)}
   else{const f=el.requestFullscreen||el.webkitRequestFullscreen;if(f)Promise.resolve(f.call(el)).catch(()=>{})}};
@@ -651,7 +686,7 @@ $("#bFind").onclick=findVods;
 $("#bCreate").onclick=createSession;
 addEventListener("resize",layout);
 addEventListener("keydown",e=>{
-  if(!S.session||e.target.closest("input,textarea")||!$("#jump").hidden||!$("#setup").hidden)return;
+  if(!S.session||e.target.closest("input,textarea")||sheetOpen())return;
   if(e.code==="Space"){e.preventDefault();togglePlay()}
   else if(e.key==="ArrowRight")setT(now()+(e.shiftKey?60000:10000));
   else if(e.key==="ArrowLeft")setT(now()-(e.shiftKey?60000:10000));
@@ -676,7 +711,7 @@ setInterval(tick,500);
 (function boot(){
   const y=new Date(Date.now()-86400000);$("#sDate").value=y.getFullYear()+"-"+String(y.getMonth()+1).padStart(2,"0")+"-"+String(y.getDate()).padStart(2,"0");
   renderControls();
-  showSetup();
+  if(!importShared())showSetup();
   if(location.protocol==="file:")status("Diese Datei muss über eine Webadresse laufen (z. B. GitHub Pages), sonst blockiert Twitch die Player.","err");
 })();
 </script>
