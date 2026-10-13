@@ -421,7 +421,7 @@ function openSession(id){
       <input class="vrange" type="range" min="0" max="100" value="100" aria-label="Lautstärke ${esc(st.name)}"><button class="vbtn" aria-label="Ton an/aus"></button></div>
       <div class="pbox"><div class="player" id="pl${i}"></div><div class="offline" hidden></div></div>`;
     wall.appendChild(el);
-    const t={st,el,i,player:null,ready:false,started:false,segId:null,muted:i!==0,vol:1,drift:0,cool:0,ours:0,lastCur:-1,stall:0,state:"loading"};
+    const t={st,el,i,player:null,ready:false,started:false,playReq:0,segId:null,muted:i!==0,vol:1,drift:0,cool:0,ours:0,lastCur:-1,stall:0,state:"loading"};
     el.querySelector(".thead").addEventListener("click",()=>solo(i));
     el.querySelector(".vbtn").addEventListener("click",e=>{e.stopPropagation();t.muted=!t.muted;applyAudio(t);renderTile(t)});
     const vr=el.querySelector(".vrange");vr.addEventListener("click",e=>e.stopPropagation());
@@ -482,12 +482,14 @@ function apply(t,force){
   }
   if(!t.ready){t.state="loading";return}
   if(!sheetOpen()){
-    if(S.playing&&P.isPaused()){t.ours=performance.now()+1500;P.play()}
+    if(S.playing&&P.isPaused()){t.ours=performance.now()+1500;if(!t.started&&!t.playReq)t.playReq=performance.now();P.play()}
     if(!S.playing&&!P.isPaused()){t.ours=performance.now()+1500;P.pause()}
   }
   const cur=P.getCurrentTime();
   const nowW=performance.now();
   if(force){t.ours=nowW+2000;P.seek(Math.max(0,off));t.cool=nowW+4000;t.drift=0;t.state="ok";t.lastCur=-1;return}
+  if(!S.playing)t.playReq=0;
+  if(!t.started){t.drift=0;t.state=S.playing&&t.playReq&&nowW-t.playReq>5000?"blocked":"ok";return}
   t.drift=cur-off;
   if(S.playing&&!P.isPaused()){ if(Math.abs(cur-t.lastCur)<0.05)t.stall++;else t.stall=0 }else t.stall=0;
   t.lastCur=cur;
@@ -506,7 +508,7 @@ function setT(T,play){
 }
 function togglePlay(){
   S.baseT=now();S.baseWall=performance.now();S.playing=!S.playing;
-  S.tiles.forEach(t=>{if(!t.ready)return;t.ours=performance.now()+1500;try{const seg=segAt(t.st,now());if(S.playing&&seg)t.player.play();else t.player.pause()}catch(e){}});
+  S.tiles.forEach(t=>{if(!t.ready)return;t.ours=performance.now()+1500;if(S.playing&&!t.started&&!t.playReq)t.playReq=performance.now();try{const seg=segAt(t.st,now());if(S.playing&&seg)t.player.play();else t.player.pause()}catch(e){}});
   S.tiles.forEach(t=>apply(t,true));
   wake();renderControls();savePos();
 }
@@ -525,7 +527,7 @@ function renderTile(t){
     off.hidden=true;
     const n=t.st.segments.length>1?` · VOD ${t.st.segments.indexOf(seg)+1}/${t.st.segments.length}`:"";
     tt.textContent=fmt((T-seg.start)/1000)+" / "+fmt(seg.dur)+n;
-    dot.className="dot "+({ok:"ok",drift:"bad",buffer:"warn",loading:"warn"}[t.state]||"");
+    dot.className="dot "+({ok:"ok",drift:"bad",buffer:"warn",loading:"warn",blocked:"bad"}[t.state]||"");
   }else{
     off.hidden=false;dot.className="dot";
     if(t.state==="waiting"&&t.next){off.innerHTML=`<b>${esc(t.st.name)} ist noch offline</b><span>Stream startet in</span><span class="mono">${fmt((t.next.start-T)/1000)}</span>`;tt.textContent="offline"}
@@ -539,9 +541,11 @@ function render(){
   if(!scrubbing)$("#scrub").value=Math.round((T-a)/(b-a)*1000);
   S.tiles.forEach(renderTile);
   const live=S.tiles.filter(t=>segAt(t.st,T));
+  const blk=live.filter(t=>t.state==="blocked");
   const bad=live.filter(t=>t.state==="drift"),buf=live.filter(t=>t.state==="buffer"||t.state==="loading");
   const pill=$("#bSync"),dot=$("#syncDot"),txt=$("#syncText");
-  if(bad.length){pill.className="pill bad";dot.className="dot bad";
+  if(blk.length){pill.className="pill bad";dot.className="dot bad";txt.textContent="Startet nicht · tippe einmal ins Video von "+blk.map(t=>t.st.name).join(", ")}
+  else if(bad.length){pill.className="pill bad";dot.className="dot bad";
     txt.textContent="Nicht synchron · "+bad.map(t=>t.st.name+" "+(t.drift>0?"+":"")+Math.round(t.drift)+"s").join(", ")+" · Tippen"}
   else if(buf.length){pill.className="pill";dot.className="dot warn";txt.textContent="Lädt · "+buf.map(t=>t.st.name).join(", ")}
   else{pill.className="pill ok";dot.className="dot ok";txt.textContent=live.length?"Synchron":"Gerade streamt niemand"}
