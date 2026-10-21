@@ -56,10 +56,12 @@ body.clean .thead{display:none}
 .vs svg{width:18px;height:18px}
 .vs.on{background:var(--accent);color:var(--accent-ink)}
 .vs.lit{color:var(--fg)}
+.tile.needtap .vs.on{background:var(--warn);color:#000}
 body.ios .vs[data-l="1"],body.ios .vs[data-l="2"]{display:none}
 .fbtn{width:34px;height:34px;border:0;border-radius:8px;background:var(--panel-2);display:grid;place-items:center;cursor:pointer;flex:none}
 .fbtn svg{width:18px;height:18px}
 .fbtn.on{background:var(--accent);color:var(--accent-ink)}
+@media (max-width:700px){.rbtn{display:none}}
 .offline{position:absolute;inset:0;z-index:2;display:grid;place-content:center;text-align:center;gap:4px;background:#000;color:var(--muted);padding:12px}
 .offline b{color:var(--fg);font-size:17px}
 .offline .mono{font-size:22px;color:var(--fg)}
@@ -136,6 +138,9 @@ textarea{min-height:110px;resize:vertical;font-family:var(--f-mono);font-size:14
 .vod .s{font-size:13px;color:var(--muted)}
 .sess{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--line);border-radius:12px;flex-wrap:wrap}
 .sess .meta{flex:1;min-width:0}
+.sess .edit{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chipbtn{height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--bg);cursor:pointer;font-weight:500}
+.chipbtn b{color:var(--bad);margin-left:4px}
 .sess .s{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;border-radius:4px;padding:0 5px;margin-right:6px;vertical-align:1px;background:var(--panel-2);color:var(--muted)}
 .tag.l{background:var(--live);color:#fff}
@@ -367,7 +372,6 @@ async function helix(path){
 }
 const toSeg=v=>({id:v.id,start:Date.parse(v.created_at),dur:parseDur(v.duration),title:v.title,login:v.user_login,name:v.user_name});
 
-/* ---------- setup ---------- */
 function renderAuth(){
   const ok=!!(S.token&&S.clientId);
   const el=$("#authStatus");
@@ -377,6 +381,13 @@ function renderAuth(){
   $("#clientId").value=S.clientId;
   $("#redirUrl").textContent=redirectUri();
 }
+const dayFmt=new Intl.DateTimeFormat("de-AT",{weekday:"short",day:"2-digit",month:"2-digit"});
+function dayOf(sess){
+  if(sess.day)return sess.day;if(sess.from)return sess.from;
+  if(sess.type==="live")return null;
+  const d=new Date(boundsOf(sess)[0]);d.setHours(0,0,0,0);return d.getTime();
+}
+function members(sess){return sess.type==="live"?sess.channels:sess.streamers}
 function renderSaved(){
   const list=$("#savedList");list.innerHTML="";
   $("#secSaved").hidden=!S.sessions.length;
@@ -386,12 +397,21 @@ function renderSaved(){
     let sub;
     if(live)sub=sess.channels.map(c=>esc(c.name)).join(" · ");
     else{const [a]=boundsOf(sess);sub=sess.streamers.map(s=>esc(s.name)).join(" · ")+" - Timeline "+(sess.pos?fmt((sess.pos-a)/1000):"0:00:00")}
-    div.innerHTML=`<div class="meta"><div style="font-weight:600"><span class="tag${live?" l":""}">${live?"LIVE":"VOD"}</span>${esc(sess.name)}</div><div class="s">${sub}</div></div>
-      <button class="btn primary" data-a="open">${live?"Öffnen":"Weiterschauen"}</button><button class="btn" data-a="share">Teilen</button><button class="btn ghost" data-a="del">Löschen</button>`;
+    const day=dayOf(sess);
+    div.innerHTML=`<div class="meta"><div style="font-weight:600"><span class="tag${live?" l":""}">${live?"LIVE":"VOD"}</span>${esc(sess.name)}${day?` <span style="color:var(--muted);font-weight:500">– ${dayFmt.format(day)}</span>`:""}</div><div class="s">${sub}</div></div>
+      <button class="btn primary" data-a="open">${live?"Öffnen":"Weiterschauen"}</button><button class="btn" data-a="edit">Bearbeiten</button><button class="btn" data-a="share">Teilen</button><button class="btn ghost" data-a="del">Löschen</button>
+      <div class="edit" hidden><span class="s">Streamer entfernen:</span>${members(sess).map((m,k)=>`<button class="chipbtn" data-a="rm" data-k="${k}">${esc(m.name)} <b aria-hidden="true">×</b></button>`).join("")}</div>`;
     div.addEventListener("click",e=>{
       const a=e.target.closest("button")?.dataset.a;
       if(a==="open")openSession(sess.id);
       if(a==="share")openShare(sess);
+      if(a==="edit"){const ed=div.querySelector(".edit");ed.hidden=!ed.hidden}
+      if(a==="rm"){const b=e.target.closest("button"),arr=members(sess);
+        if(arr.length<=1){notice("Mindestens ein Streamer muss in der Sitzung bleiben.",[],3000);b.textContent="Letzter Streamer – nicht löschbar";return}
+        if(!b.dataset.confirm){b.dataset.confirm="1";b.innerHTML=esc(arr[+b.dataset.k].name)+" wirklich entfernen?";return}
+        arr.splice(+b.dataset.k,1);LS.set("vs.sessions",S.sessions);
+        if(S.session===sess)S.reopen=sess.id;
+        renderSaved();const again=[...$("#savedList").children][S.sessions.slice().reverse().indexOf(sess)];if(again)again.querySelector(".edit").hidden=false}
       if(a==="del"){const b=e.target.closest("button");
         if(b.dataset.confirm){S.sessions=S.sessions.filter(x=>x.id!==sess.id);LS.set("vs.sessions",S.sessions);renderSaved()}
         else{b.dataset.confirm="1";b.textContent="Wirklich löschen?";b.classList.remove("ghost");setTimeout(()=>{if(b.isConnected){delete b.dataset.confirm;b.textContent="Löschen";b.classList.add("ghost")}},4000)}}
@@ -463,6 +483,7 @@ function createSession(){
   if(!picked.length){status("Wähle mindestens ein VOD aus.","err");return}
   if(picked.length>6){status("Maximal 6 Streams gleichzeitig.","err");return}
   const sess={id:Date.now().toString(36),name:$("#sName").value.trim()||"Sitzung "+new Date().toLocaleDateString("de-AT"),streamers:picked,pos:null};
+  if(S.foundDay)sess.day=S.foundDay;
   if(S.foundDay&&picked.some(st=>st.segments.some(g=>g.carry))){sess.from=S.foundDay;sess.pos=S.foundDay}
   if(S.startAt){for(const st of picked){const g=st.segments.find(x=>x.id===S.startAt.id);if(g)sess.pos=g.start+S.startAt.off*1000}}
   S.sessions.push(sess);LS.set("vs.sessions",S.sessions);
@@ -490,15 +511,15 @@ async function createLive(){
   openSession(sess.id);
 }
 
-/* ---------- session / tiles ---------- */
 function tileMarkup(i,name){
   const steps=[0,1,2,3].map(l=>`<button class="vs" data-l="${l}" title="${LVNAME[l]}" aria-label="${LVNAME[l]}">${ICON["v"+l]}</button>`).join("");
   return `<div class="thead"><div class="tid"><span class="chip" style="background:${COLORS[i%COLORS.length]}"></span><span class="tname">${esc(name)}</span><span class="ttime mono"></span><span class="dot"></span></div>
-    <div class="vsteps">${steps}</div><button class="fbtn" title="Nur diesen Stream zeigen" aria-label="Nur diesen Stream zeigen"></button></div>
+    <div class="vsteps">${steps}</div><button class="fbtn rbtn" title="Diesen Stream neu laden" aria-label="Diesen Stream neu laden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button><button class="fbtn ff" title="Nur diesen Stream zeigen" aria-label="Nur diesen Stream zeigen"></button></div>
     <div class="pbox"><div class="player" id="pl${i}"></div><div class="offline" hidden></div></div>`;
 }
 function openSession(id){
   const sess=S.sessions.find(s=>s.id===id);if(!sess)return;
+  S.reopen=null;
   teardown();
   S.session=sess;S.focus=-1;
   document.body.classList.toggle("live",isLive());
@@ -511,8 +532,9 @@ function openSession(id){
     wall.appendChild(el);
     const t={st,el,i,live:isLive(),player:null,ready:false,started:false,playReq:0,segId:null,lvl:i===0?3:0,drift:0,cool:0,ours:0,paused:true,raw:-1,rawAt:0,adv:0,lastPlay:0,seekAt:0,waiting:false,autoSeeks:[],load:0,state:"loading",shown:false,unloaded:true,online:null};
     el.querySelector(".tid").addEventListener("click",()=>solo(i));
-    el.querySelectorAll(".vs").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();setLvl(t,+b.dataset.l)}));
-    el.querySelector(".fbtn").addEventListener("click",e=>{e.stopPropagation();toggleFocus(i)});
+    el.querySelectorAll(".vs").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();setLvl(t,+b.dataset.l,true)}));
+    el.querySelector(".ff").addEventListener("click",e=>{e.stopPropagation();toggleFocus(i)});
+    el.querySelector(".rbtn").addEventListener("click",e=>{e.stopPropagation();if(t.unloaded)return;t.reloads=0;t.reloadAt=0;reloadPlayer(t);notice(t.st.name+" wird neu geladen.",[],2500)});
     el.hidden=true;
     S.tiles.push(t);
   });
@@ -521,17 +543,31 @@ function openSession(id){
   updateShown(true);renderControls();tick();
 }
 function teardown(){
+  loadQ=[];
   S.tiles.forEach(t=>t.el.remove());S.tiles=[];S.session=null;S.playing=false;S.focus=-1;hideNotice();
 }
 function segAt(st,T){return st.segments.find(g=>T>=g.start&&T<g.start+g.dur*1000)}
 function hookPlayer(t){
   const P=t.player,on=(ev,fn)=>P.addEventListener(ev,(...x)=>{if(t.player===P)fn(...x)});
+  Object.assign(t,{audioPending:true,muted:true,playAt:performance.now(),unlocked:false,unmuteAt:0,needTap:false});
   on(Twitch.Player.READY,()=>{t.ready=true;t.cool=performance.now()+4000;if(t.live)liveApply(t);else apply(t,false)});
-  on(Twitch.Player.PLAYING,()=>{t.paused=false;if(!t.started){t.started=true;applyAudio(t)}});
+  on(Twitch.Player.PLAYING,()=>{t.paused=false;if(!t.started){t.started=true;if(!t.audioPending)applyAudio(t)}
+    if(t.audioPending)setTimeout(()=>{if(t.player===P&&t.audioPending&&performance.now()-t.playAt>1100){t.audioPending=false;applyAudio(t)}},1200)});
   on(Twitch.Player.PLAY,()=>{t.paused=false;userEvt(t,"play")});
   on(Twitch.Player.PAUSE,()=>{t.paused=true;userEvt(t,"pause")});
   on(Twitch.Player.ENDED,()=>{t.paused=true});
   on(Twitch.Player.SEEK,()=>{t.raw=-1;userEvt(t,"seek")});
+}
+function muteFor(t){
+  try{t.player.setMuted(true)}catch(e){}
+  t.muted=true;t.audioPending=true;t.playAt=performance.now();t.unmuteAt=0;
+}
+function playTile(t){
+  const P=t.player;if(!P)return;
+  const n=performance.now();t.ours=n+1500;t.lastPlay=n;
+  if(!t.started&&!t.playReq)t.playReq=n;
+  muteFor(t);
+  try{P.play()}catch(e){}
 }
 function createPlayer(t,autoplay){
   const T=now();
@@ -542,7 +578,6 @@ function createPlayer(t,autoplay){
   t.player=new Twitch.Player("pl"+t.i,{width:"100%",height:"100%",video:seg.id,time:`${h}h${m}m${s}s`,autoplay:!!autoplay,muted:true,parent:[location.hostname]});
   hookPlayer(t);
 }
-/* a player that is stuck gets thrown away and created fresh (starting muted with autoplay, which every browser allows) */
 function reloadPlayer(t){
   const n=performance.now();t.reloads=(t.reloads||0)+1;t.reloadAt=n;
   t.el.querySelector(".player").innerHTML="";
@@ -556,10 +591,13 @@ function createLivePlayer(t,autoplay){
 const sheetOpen=()=>!$("#setup").hidden||!$("#jump").hidden||!$("#share").hidden;
 function sample(t){
   const c=t.player.getCurrentTime(),n=performance.now();
-  if(c!==t.raw){if(t.raw>=0&&c>t.raw&&c-t.raw<5){t.adv=n;if(!t.started){t.started=true;applyAudio(t)}}t.raw=c;t.rawAt=n}
+  if(c!==t.raw){if(t.raw>=0&&c>t.raw&&c-t.raw<5){t.adv=n;
+      if(!t.started){t.started=true;if(!t.audioPending)applyAudio(t)}
+      if(t.audioPending&&n-(t.playAt||0)>1100){t.audioPending=false;applyAudio(t)}
+      if(t.reloads&&n-(t.reloadAt||0)>120000)t.reloads=0}
+    t.raw=c;t.rawAt=n}
   return c;
 }
-/* Twitch does not always send play/pause events, so "time is moving" also counts as playing */
 function pz(t){sample(t);return performance.now()-t.adv<2500?false:t.paused}
 function curOf(t){const c=sample(t);return pz(t)?c:c+(performance.now()-t.rawAt)/1000}
 function userEvt(t,kind){
@@ -574,33 +612,76 @@ function userEvt(t,kind){
     setTimeout(()=>{apply(t,true);notice("Spulen in einem einzelnen Video ist gesperrt, damit alles synchron bleibt. Zum Springen unten „Springen“ nutzen.",[],5000)},300);
   }
 }
-function applyAudio(t){
-  if(!t.ready||!t.started)return;
-  try{t.player.setMuted(t.lvl===0);if(!isIOS&&t.lvl>0)t.player.setVolume(LV[t.lvl])}catch(e){}
+const running=t=>performance.now()-t.adv<1500;
+function applyAudio(t,g){
+  if(!t.player||!t.ready||!t.started||t.audioPending)return;
+  const mute=t.lvl===0||(t.needTap&&!g);
+  try{t.player.setMuted(mute);if(!isIOS&&!mute)t.player.setVolume(LV[t.lvl])}catch(e){}
+  if(!mute&&t.muted&&running(t)){const n=performance.now();t.unmuteAt=n;t.ours=Math.max(t.ours,n+2500)}
+  if(!mute&&g)t.needTap=false;
+  t.muted=mute;
 }
-function setLvl(t,l){t.lvl=l;applyAudio(t);renderTile(t)}
-function solo(i){S.tiles.forEach(t=>{t.lvl=t.i===i?Math.max(t.lvl,3):0;applyAudio(t);renderTile(t)})}
+function unlockAudio(t){
+  if(t.unlocked||!t.player||!t.ready||!t.muted)return;
+  t.unlocked=true;
+  try{t.player.setMuted(false);t.player.setMuted(true)}catch(e){}
+  t.muted=true;
+}
+function audioCheck(t){
+  if(!t.unmuteAt)return false;
+  const n=performance.now();
+  if(!S.playing||t.adv>t.unmuteAt+700||t.seekAt>t.unmuteAt){t.unmuteAt=0;return false}
+  if(n-t.unmuteAt<3500)return false;
+  t.unmuteAt=0;t.needTap=true;
+  playTile(t);
+  if(!(n-t.hintAt<30000)){t.hintAt=n;notice("Das iPad hat den Ton von "+t.st.name+" blockiert. Einmal tippen schaltet ihn ein.",[{label:"Ton an",primary:true,fn:hideNotice}],12000)}
+  return true;
+}
+function gestureKick(e){
+  if(!S.session)return;
+  const n=performance.now(),T=now(),own=e&&e.target&&e.target.closest?e.target.closest(".tile"):null;
+  S.tiles.forEach(t=>{
+    if(!t.player||!t.ready||!t.shown||t.el===own)return;
+    if(t.live?t.online===false:!segAt(t.st,T))return;
+    if(running(t)){if(t.lvl>0&&t.started&&(t.needTap||t.audioPending)){t.audioPending=false;applyAudio(t,true)}return}
+    if(t.lvl>0)unlockAudio(t);
+    if(S.playing&&n-t.adv>2500&&n-t.lastPlay>1000)playTile(t);
+  });
+}
+function soundSoon(){S.tiles.forEach(t=>{if(t.player&&t.ready&&t.started&&t.audioPending){sample(t);if(t.adv>t.playAt){t.audioPending=false;applyAudio(t,true)}}})}
+function setLvl(t,l,g){
+  t.lvl=l;
+  if(g&&l>0&&t.player&&t.ready){if(running(t)){if(t.started)t.audioPending=false}else unlockAudio(t)}
+  applyAudio(t,g);renderTile(t);
+}
+function solo(i){S.tiles.forEach(t=>setLvl(t,t.i===i?Math.max(t.lvl,3):0,true))}
 function toggleFocus(i){
   const leaving=S.focus===i;
   S.focus=leaving?-1:i;
-  if(!leaving){const t=S.tiles[i];if(t.lvl===0)setLvl(t,3)}
+  if(!leaving){const t=S.tiles[i];if(t.lvl===0)setLvl(t,3,true)}
   updateShown(true);
   if(leaving&&!isLive())setTimeout(syncNow,400);
 }
 
-/* only streams on screen get a Twitch player; hidden ones are removed completely (keeps the iPad light) */
 function unloadPlayer(t){
   if(t.unloaded)return;
   t.el.querySelector(".player").innerHTML="";
   Object.assign(t,{unloaded:true,player:null,ready:false,started:false,paused:true,raw:-1,rawAt:0,adv:0,playReq:0,waiting:false,seekAt:0,state:"loading"});
 }
+let loadQ=[],loadBusy=false;
 function loadPlayer(t){
   if(!t.unloaded)return;
-  const n=performance.now();
-  Object.assign(t,{unloaded:false,playReq:S.playing?n:0,lastPlay:n});
-  if(t.live)createLivePlayer(t,S.playing);else createPlayer(t,S.playing);
+  t.unloaded=false;t.player=null;loadQ.push(t);pumpLoad();
 }
-/* which tiles are on screen */
+function pumpLoad(){
+  if(loadBusy)return;
+  const t=loadQ.shift();if(!t)return;
+  if(t.unloaded||t.player||!S.tiles.includes(t)){pumpLoad();return}
+  loadBusy=true;
+  const n=performance.now();Object.assign(t,{playReq:S.playing?n:0,lastPlay:n});
+  if(t.live)createLivePlayer(t,S.playing);else createPlayer(t,S.playing);
+  setTimeout(()=>{loadBusy=false;pumpLoad()},900);
+}
 function wantShown(t){
   if(S.focus>=0)return t.i===S.focus;
   if(t.live)return t.online!==false||!S.hideOff;
@@ -621,10 +702,9 @@ function updateShown(force){
   if(changed||force)layout();
 }
 
-/* VOD control */
 function apply(t,force){
   const T=now(),seg=segAt(t.st,T),P=t.player;
-  if(t.unloaded){const next=seg?null:t.st.segments.find(g=>g.start>T);t.state=seg?"ok":next?"waiting":"ended";t.next=next;return}
+  if(t.unloaded||!t.player){const next=seg?null:t.st.segments.find(g=>g.start>T);t.state=seg?"loading":next?"waiting":"ended";t.next=next;return}
   if(!seg){
     const next=t.st.segments.find(g=>g.start>T);
     t.state=next?"waiting":"ended";t.next=next;
@@ -634,19 +714,20 @@ function apply(t,force){
   const off=(T-seg.start)/1000;
   if(t.segId!==seg.id){
     t.segId=seg.id;t.state="loading";t.cool=performance.now()+5000;t.ours=performance.now()+4000;
+    muteFor(t);
     try{P.setVideo(seg.id,off)}catch(e){}
-    if(S.playing&&t.shown)setTimeout(()=>{try{P.play()}catch(e){}},900);
+    if(S.playing&&t.shown)setTimeout(()=>playTile(t),900);
     return;
   }
   if(!t.ready){t.state="loading";return}
   if(!t.shown){if(!pz(t)){t.ours=performance.now()+1500;P.pause()}t.state="ok";return}
+  if(!force&&audioCheck(t)){t.state="ok";return}
   if(!sheetOpen()){
-    if(S.playing&&pz(t)&&performance.now()-t.lastPlay>3000){t.lastPlay=performance.now();t.ours=t.lastPlay+1500;if(!t.started&&!t.playReq)t.playReq=t.lastPlay;P.play()}
+    if(S.playing&&pz(t)&&performance.now()-t.lastPlay>3000&&!t.unmuteAt)playTile(t);
     if(!S.playing&&!pz(t)){t.ours=performance.now()+1500;P.pause()}
   }
   const cur=curOf(t);
   const nowW=performance.now();
-  /* when playing, aim a bit ahead by how long this player needed to load last time */
   const doSeek=()=>{const ahead=S.playing?Math.min(t.load,15):0;t.ours=nowW+4000;P.seek(Math.max(0,Math.min(off+ahead,seg.dur-1)));t.seekAt=nowW;t.waiting=true;t.drift=0;t.raw=-1};
   if(force){doSeek();t.state="ok";return}
   if(!S.playing)t.playReq=0;
@@ -655,7 +736,6 @@ function apply(t,force){
     if(S.playing&&t.playReq&&nowW-t.playReq>9000&&canReload){reloadPlayer(t);return}
     t.drift=0;t.state=S.playing&&t.playReq&&nowW-t.playReq>5000?"blocked":"ok";return}
   if(S.playing&&!t.waiting&&nowW-t.adv>12000&&nowW-t.seekAt>12000&&canReload){reloadPlayer(t);return}
-  /* after a seek, wait until the video really moves again before judging the sync (long VODs can take a while on iPad) */
   if(t.waiting){
     if(t.adv>t.seekAt+300){t.waiting=false;t.cool=nowW+2500;if(S.playing)t.load=Math.max(0,(t.adv-t.seekAt)/1000-0.5)}
     else{
@@ -668,13 +748,13 @@ function apply(t,force){
   t.autoSeeks=t.autoSeeks.filter(x=>nowW-x<60000);
   if(S.autoSync&&S.playing&&!sheetOpen()&&Math.abs(t.drift)>4&&t.autoSeeks.length<3){t.autoSeeks.push(nowW);doSeek();t.state="ok"}
 }
-/* LIVE control */
 function liveApply(t){
   if(t.unloaded||!t.ready){t.state="loading";return}
   const P=t.player,n=performance.now();
   if(!t.shown||t.online===false){if(!pz(t)){t.ours=n+1500;P.pause()}t.state="ok";return}
+  if(audioCheck(t)){t.state="ok";return}
   if(!sheetOpen()){
-    if(S.playing&&pz(t)&&n-t.lastPlay>3000){t.lastPlay=n;t.ours=n+1500;if(!t.started&&!t.playReq)t.playReq=n;P.play()}
+    if(S.playing&&pz(t)&&n-t.lastPlay>3000&&!t.unmuteAt)playTile(t);
     if(!S.playing&&!pz(t)){t.ours=n+1500;P.pause()}
   }
   if(!S.playing)t.playReq=0;
@@ -683,8 +763,9 @@ function liveApply(t){
 }
 function liveReshow(t){
   t.ours=performance.now()+4000;
+  muteFor(t);
   try{t.player.setChannel(t.st.login)}catch(e){}
-  if(S.playing)setTimeout(()=>{try{t.player.play()}catch(e){}},900);
+  if(S.playing)setTimeout(()=>playTile(t),900);
 }
 let liveTimer=0;
 async function pollLive(){
@@ -706,7 +787,6 @@ async function pollLive(){
   liveTimer=setTimeout(pollLive,60000);
 }
 
-/* time control */
 function setT(T,play){
   if(!S.session||isLive())return;
   const [a,b]=bounds();
@@ -725,17 +805,16 @@ function jumpTo(T,label){
 function togglePlay(){
   if(!S.session)return;
   S.baseT=now();S.baseWall=performance.now();S.playing=!S.playing;
-  S.tiles.forEach(t=>{if(!t.ready||!t.shown)return;t.ours=performance.now()+1500;if(S.playing&&!t.started&&!t.playReq)t.playReq=performance.now();t.lastPlay=performance.now();
-    try{const ok=t.live?t.online!==false:!!segAt(t.st,now());if(S.playing&&ok)t.player.play();else t.player.pause()}catch(e){}});
-  if(!isLive())S.tiles.forEach(t=>apply(t,true));
-  if(S.playing)[800,2500].forEach(ms=>setTimeout(()=>S.tiles.forEach(applyAudio),ms));
+  S.tiles.forEach(t=>{if(!t.ready||!t.shown)return;
+    const ok=t.live?t.online!==false:!!segAt(t.st,now());
+    if(S.playing&&ok)playTile(t);else{t.ours=performance.now()+1500;try{t.player.pause()}catch(e){}}});
+  if(S.playing)[450,950].forEach(ms=>setTimeout(soundSoon,ms));
   wake();renderControls();savePos();
 }
 function syncNow(){if(isLive())return;S.tiles.forEach(t=>{t.autoSeeks=[];t.reloads=0});S.baseT=now();S.baseWall=performance.now();S.tiles.forEach(t=>apply(t,true));render()}
 let lastSave=0;
 function savePos(){if(!S.session||isLive())return;S.session.pos=now();LS.set("vs.sessions",S.sessions);lastSave=performance.now()}
 
-/* notice bar inside the dock (never covers a video) */
 let nTimer=0;
 function notice(text,acts,ms){
   $("#nText").textContent=text;const box=$("#nAct");box.innerHTML="";
@@ -745,12 +824,12 @@ function notice(text,acts,ms){
 }
 function hideNotice(){clearTimeout(nTimer);if(!$("#notice").hidden){$("#notice").hidden=true;layout()}}
 
-/* render */
 function renderTile(t){
   t.el.querySelectorAll(".vs").forEach(b=>{const l=+b.dataset.l;b.classList.toggle("on",l===t.lvl);b.classList.toggle("lit",l>0&&l<t.lvl)});
   if(isIOS){const on=t.el.querySelector('.vs[data-l="3"]');on.classList.toggle("on",t.lvl>0)}
   t.el.classList.toggle("loud",t.lvl>0);
-  const fb=t.el.querySelector(".fbtn");fb.innerHTML=S.focus===t.i?ICON.shrink:ICON.expand;fb.classList.toggle("on",S.focus===t.i);
+  t.el.classList.toggle("needtap",!!t.needTap&&t.lvl>0);
+  const fb=t.el.querySelector(".ff");fb.innerHTML=S.focus===t.i?ICON.shrink:ICON.expand;fb.classList.toggle("on",S.focus===t.i);
   fb.title=S.focus===t.i?"Zurück zu allen Streams":"Nur diesen Stream zeigen";
   const off=t.el.querySelector(".offline"),tt=t.el.querySelector(".ttime"),dot=t.el.querySelector(".dot");
   if(t.live){
@@ -776,7 +855,9 @@ function renderTile(t){
 function syncSummary(){
   const vis=S.tiles.filter(t=>t.shown&&(t.live?t.online!==false:segAt(t.st,now())));
   const blk=vis.filter(t=>t.state==="blocked");
-  if(blk.length)return {cls:"bad",text:"Startet nicht · tippe einmal ins Video von "+blk.map(t=>t.st.name).join(", ")};
+  if(blk.length)return {cls:"bad",kick:true,text:"Tippen zum Starten · "+blk.map(t=>t.st.name).join(", ")};
+  const mute=vis.filter(t=>t.needTap&&t.lvl>0);
+  if(mute.length)return {cls:"warn",kick:true,text:"Tippen für Ton · "+mute.map(t=>t.st.name).join(", ")};
   if(isLive())return {cls:"ok",text:vis.length?vis.length+" live":"Gerade ist niemand live"};
   const bad=vis.filter(t=>t.state==="drift");
   if(bad.length)return {cls:"bad",text:"Nicht synchron · "+bad.map(t=>t.st.name+" "+(t.drift>0?"+":"")+Math.round(t.drift)+"s").join(", ")+" · Tippen"};
@@ -828,7 +909,6 @@ function layout(){
 }
 function setClean(v){S.clean=v;renderControls();layout()}
 
-/* jump dialog */
 const J={st:0,seg:0};
 function openJump(){
   if(!S.session||isLive())return;
@@ -866,13 +946,12 @@ function previewJump(){
   renderLinks(T);
 }
 
-/* sharing */
 function qrSvg(text){try{const q=qrcode(0,"L");q.addData(text);q.make();return q.createSvgTag(4,2)}catch(e){return "<span style=\"color:#000\">QR-Code konnte nicht erstellt werden.</span>"}}
 const b64u={enc:s=>btoa(unescape(encodeURIComponent(s))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""),
   dec:s=>decodeURIComponent(escape(atob(s.replace(/-/g,"+").replace(/_/g,"/"))))};
 function shareUrl(sess){
   const o=sess.type==="live"?{t:"l",n:sess.name,c:sess.channels.map(c=>[c.login,c.name])}
-    :{n:sess.name,f:sess.from?Math.round(sess.from/1000):undefined,p:Math.round((sess.pos||boundsOf(sess)[0])/1000),s:sess.streamers.map(st=>[st.login,st.name,st.segments.map(g=>[g.id,Math.round(g.start/1000),g.dur])])};
+    :{n:sess.name,f:sess.from?Math.round(sess.from/1000):undefined,d:sess.day?Math.round(sess.day/1000):undefined,p:Math.round((sess.pos||boundsOf(sess)[0])/1000),s:sess.streamers.map(st=>[st.login,st.name,st.segments.map(g=>[g.id,Math.round(g.start/1000),g.dur])])};
   return location.origin+location.pathname+"?s="+b64u.enc(JSON.stringify(o));
 }
 function openShare(sess){
@@ -899,7 +978,7 @@ function importShared(){
       const sig=x=>(x.streamers||[]).flatMap(st=>st.segments.map(g=>g.id)).sort().join();
       sess=S.sessions.find(x=>x.type!=="live"&&sig(x)===sig({streamers}));
       if(sess){sess.pos=o.p*1000;sess.name=o.n||sess.name}
-      else{sess={id:Date.now().toString(36),name:o.n||"Sitzung",streamers,pos:o.p*1000,from:o.f?o.f*1000:undefined};S.sessions.push(sess)}
+      else{sess={id:Date.now().toString(36),name:o.n||"Sitzung",streamers,pos:o.p*1000,from:o.f?o.f*1000:undefined,day:o.d?o.d*1000:undefined};S.sessions.push(sess)}
     }
     LS.set("vs.sessions",S.sessions);
     openSession(sess.id);notice("Sitzung übernommen.",[],3000);
@@ -935,7 +1014,6 @@ $("#jCancel").onclick=()=>$("#jump").hidden=true;
 $("#jGo").onclick=()=>{$("#jump").hidden=true;jumpTo(jumpTarget().T)};
 $("#jFromStart").onclick=()=>{$("#jump").hidden=true;jumpTo(startT(),"Zum Anfang gesprungen")};
 
-/* timeline: tapping only proposes a jump, it needs a confirm */
 let scrubbing=false,pendingT=null;
 const scrubT=()=>{const [a,b]=bounds();return a+$("#scrub").value/1000*(b-a)};
 $("#scrub").addEventListener("input",()=>{scrubbing=true;$("#tNow").textContent=fmt((scrubT()-bounds()[0])/1000)});
@@ -950,7 +1028,7 @@ $("#bPlay").onclick=$("#bPlay2").onclick=togglePlay;
 const startT=()=>Math.max(bounds()[0],S.session.from||0);
 $("#bStart").onclick=()=>jumpTo(startT(),"Zum Anfang gesprungen");
 $("#bJump").onclick=openJump;
-$("#bSync").onclick=syncNow;
+$("#bSync").onclick=()=>{if(!syncSummary().kick)syncNow()};
 $("#bAuto").onclick=()=>{S.autoSync=!S.autoSync;LS.set("vs.auto",S.autoSync);renderControls()};
 $("#bOff").onclick=()=>{S.hideOff=!S.hideOff;LS.set("vs.hideOff",S.hideOff);renderControls();updateShown(true);render();
   notice(S.hideOff?"Streams, die gerade offline sind, werden ausgeblendet und tauchen beim Start automatisch auf.":"Offline-Streams werden wieder angezeigt.",[],3500)};
@@ -964,7 +1042,7 @@ $("#bFull").onclick=()=>{const d=document,el=d.documentElement;
   else{const f=el.requestFullscreen||el.webkitRequestFullscreen;if(f)Promise.resolve(f.call(el)).catch(()=>{})}};
 ["fullscreenchange","webkitfullscreenchange"].forEach(ev=>document.addEventListener(ev,()=>setTimeout(layout,200)));
 $("#bSessions").onclick=$("#bSessions2").onclick=showSetup;
-$("#closeSetup").onclick=()=>$("#setup").hidden=true;
+$("#closeSetup").onclick=()=>{$("#setup").hidden=true;if(S.reopen){const id=S.reopen;S.reopen=null;openSession(id)}};
 $("#mVod").onclick=()=>setMode("vod");
 $("#mLive").onclick=()=>setMode("live");
 $("#bConnect").onclick=connect;
@@ -976,6 +1054,7 @@ $("#bLive").onclick=createLive;
 addEventListener("resize",layout);
 addEventListener("keydown",e=>{
   if(!S.session||e.target.closest("input,textarea")||sheetOpen())return;
+  gestureKick();
   if(e.code==="Space"){e.preventDefault();togglePlay()}
   else if(e.key==="h")setClean(!S.clean);
   else if(e.key==="f"){const t=S.tiles.find(t=>t.lvl>0&&t.shown);if(t)toggleFocus(t.i)}
@@ -989,11 +1068,17 @@ addEventListener("keydown",e=>{
 });
 let wl=null;
 async function wake(){try{if(S.playing&&!wl&&navigator.wakeLock){wl=await navigator.wakeLock.request("screen");wl.addEventListener("release",()=>wl=null)}else if(!S.playing&&wl){wl.release();wl=null}}catch(e){}}
-document.addEventListener("visibilitychange",()=>{if(!document.hidden)wake();else savePos()});
+document.addEventListener("visibilitychange",()=>{
+  if(!document.hidden){wake();if(S.bgPaused){S.bgPaused=false;notice("Angehalten, solange die Seite im Hintergrund war. ▶︎ spielt an derselben Stelle weiter.",[],6000)}}
+  else if(isIOS&&S.session&&!isLive()&&S.playing){togglePlay();S.bgPaused=true}
+  else savePos();
+});
+document.addEventListener("click",gestureKick,true);
 
 function tick(){try{tickInner()}catch(e){console.error(e)}}
 function tickInner(){
   if(!S.session)return;
+  S.tiles.forEach(t=>{if(t.audioPending&&t.started&&performance.now()-(t.playAt||0)>6000){t.audioPending=false;applyAudio(t)}});
   if(isLive()){updateShown();S.tiles.forEach(liveApply);render();return}
   const [,b]=bounds();
   if(S.playing&&now()>=b-1000){S.baseT=b-1000;S.playing=false;renderControls()}
